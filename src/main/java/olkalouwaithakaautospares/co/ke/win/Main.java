@@ -1,6 +1,6 @@
 package olkalouwaithakaautospares.co.ke.win;
 
-import olkalouwaithakaautospares.co.ke.win.ui.signup.AuthPanel;
+import olkalouwaithakaautospares.co.ke.win.ui.auth.AuthPanel;
 
 import javax.swing.*;
 import java.awt.*;

@@ -20,14 +20,7 @@
     </properties>
 
     <dependencies>
-        <!-- HTTP client for API calls -->
-        <dependency>
-            <groupId>com.squareup.okhttp3</groupId>
-            <artifactId>okhttp</artifactId>
-            <version>4.12.0</version>
-        </dependency>
-
-        <!-- JSON parser -->
+        <!-- Jackson for JSON -->
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
@@ -47,14 +40,6 @@
             <artifactId>jakarta.validation-api</artifactId>
             <version>3.0.2</version>
         </dependency>
-
-        <!-- Source: https://mvnrepository.com/artifact/com.squareup.okhttp3/okhttp-java-net-cookiejar -->
-        <dependency>
-            <groupId>com.squareup.okhttp3</groupId>
-            <artifactId>okhttp-java-net-cookiejar</artifactId>
-            <version>5.0.0-alpha.14</version>
-            <scope>compile</scope>
-        </dependency>
     </dependencies>
 
     <build>
@@ -65,8 +50,8 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.11.0</version>
                 <configuration>
-                    <source>22</source>
-                    <target>22</target>
+                    <source>${maven.compiler.source}</source>
+                    <target>${maven.compiler.target}</target>
                 </configuration>
             </plugin>
 
@@ -84,7 +69,7 @@
                         <configuration>
                             <transformers>
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-                                    <mainClass>co.ke.olkalouwaithakaautospares.win.Main</mainClass>
+                                    <mainClass>olkalouwaithakaautospares.co.ke.win.Main</mainClass>
                                 </transformer>
                             </transformers>
                         </configuration>
@@ -93,5 +78,4 @@
             </plugin>
         </plugins>
     </build>
-
 </project>

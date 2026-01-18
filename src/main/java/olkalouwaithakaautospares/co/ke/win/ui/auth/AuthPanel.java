@@ -1,8 +1,8 @@
-package olkalouwaithakaautospares.co.ke.win.ui.signup;
+package olkalouwaithakaautospares.co.ke.win.ui.auth;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import okhttp3.*;
-import okhttp3.java.net.cookiejar.JavaNetCookieJar;
+import olkalouwaithakaautospares.co.ke.win.utils.BaseClient;
+import olkalouwaithakaautospares.co.ke.win.utils.UserSessionManager;
+import olkalouwaithakaautospares.co.ke.win.ui.dashboard.MainDashboard;
 
 import javax.imageio.ImageIO;
 import javax.swing.*;
@@ -13,31 +13,17 @@ import java.awt.geom.RoundRectangle2D;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.CookieHandler;
-import java.net.CookieManager;
 import java.net.URI;
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.regex.Pattern;
 
 /**
- * Complete authentication panel including:
- * - Left hero branding pane
- * - Right auth card area with Login and Signup cards
- * - Managed overlay spinner for network activity
- *
- * Theme tweaks only: dark fields, white typing text, smaller role box.
- * No logic changed.
+ * AuthPanel - Modern authentication panel with BaseClient integration
  */
 public class AuthPanel extends JPanel {
-    private static final String API_BASE = "http://localhost:8080";
-    private static final MediaType JSON = MediaType.get("application/json; charset=utf-8");
-
-    // HTTP client and JSON mapper
-    private final OkHttpClient httpClient;
-    private final ObjectMapper mapper = new ObjectMapper();
-
-    // Card layout for login/signup
+    // UI Components
     private final CardLayout cardLayout = new CardLayout();
     private final JPanel authCards = new JPanel(cardLayout);
 
@@ -57,23 +43,18 @@ public class AuthPanel extends JPanel {
     private final JLabel loginInlineMsg = new JLabel(" ");
     private final JCheckBox rememberMeCheckbox = new JCheckBox("Remember me");
 
-    // Layered container: base + overlay (OverlayLayout)
+    // Container layers
     private final JPanel layeredRoot = new JPanel();
     private final JPanel baseLayer = new JPanel(new BorderLayout());
     private final JPanel overlayLayer = new JPanel(new GridBagLayout());
-
-    // Split pane between hero and auth
     private final JSplitPane splitPane = new JSplitPane();
 
-    // state
+    // State
     private boolean isLoginMode = true;
 
     public AuthPanel() {
-        // Cookie manager for OkHttp
-        CookieManager cm = new CookieManager();
-        CookieHandler.setDefault(cm);
-        httpClient = new OkHttpClient.Builder().cookieJar(new JavaNetCookieJar(cm)).build();
-
+        // Initialize BaseClient (will use shared cookie manager)
+        BaseClient.getInstance();
         initUI();
     }
 
@@ -81,7 +62,7 @@ public class AuthPanel extends JPanel {
         setLayout(new BorderLayout());
         setBackground(new Color(18, 18, 18));
 
-        // ===== Build hero and auth panels =====
+        // Build hero and auth panels
         JPanel heroPanel = createHeroPanel();
         JPanel rightAuth = createRightAuthContainer();
 
@@ -96,26 +77,26 @@ public class AuthPanel extends JPanel {
         baseLayer.setOpaque(false);
         baseLayer.add(splitPane, BorderLayout.CENTER);
 
-        // ===== Overlay (initially hidden) =====
+        // Overlay (initially hidden)
         overlayLayer.setOpaque(false);
-        overlayLayer.setVisible(false); // show only during network ops
+        overlayLayer.setVisible(false);
         overlayLayer.add(createLoadingOverlay());
 
-        // ===== OverlayLayout stacking: base at bottom, overlay on top =====
+        // OverlayLayout stacking
         layeredRoot.setLayout(new OverlayLayout(layeredRoot));
-        layeredRoot.add(overlayLayer); // top component
-        layeredRoot.add(baseLayer);    // bottom component
+        layeredRoot.add(overlayLayer);
+        layeredRoot.add(baseLayer);
 
         add(layeredRoot, BorderLayout.CENTER);
 
-        // ===== Build auth cards (login & signup) =====
+        // Build auth cards
         authCards.add(createLoginPanel(), "LOGIN");
         authCards.add(createSignupPanel(), "SIGNUP");
-        cardLayout.show(authCards, "LOGIN"); // default view
+        cardLayout.show(authCards, "LOGIN");
     }
 
     // ---------------------------
-    // RIGHT side container
+    // UI Creation Methods
     // ---------------------------
     private JPanel createRightAuthContainer() {
         JPanel outer = new JPanel(new BorderLayout());
@@ -123,7 +104,6 @@ public class AuthPanel extends JPanel {
         outer.setOpaque(true);
         outer.setBorder(new EmptyBorder(40, 40, 40, 40));
 
-        // glass panel that contains authCards
         JPanel glass = new JPanel(new BorderLayout()) {
             @Override
             protected void paintComponent(Graphics g) {
@@ -142,9 +122,6 @@ public class AuthPanel extends JPanel {
         return outer;
     }
 
-    // ---------------------------
-    // LEFT hero branding
-    // ---------------------------
     private JPanel createHeroPanel() {
         JPanel panel = new JPanel(new GridBagLayout()) {
             @Override
@@ -156,7 +133,7 @@ public class AuthPanel extends JPanel {
                 g2d.setPaint(gp);
                 g2d.fillRect(0, 0, getWidth(), getHeight());
 
-                // subtle dot pattern for depth
+                // Subtle dot pattern
                 g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.04f));
                 g2d.setColor(Color.WHITE);
                 for (int x = 0; x < getWidth(); x += 36) {
@@ -176,7 +153,7 @@ public class AuthPanel extends JPanel {
         gbc.insets = new Insets(8, 0, 8, 0);
         gbc.anchor = GridBagConstraints.CENTER;
 
-        // Logo (resource optional)
+        // Logo
         JLabel logo = new JLabel();
         logo.setPreferredSize(new Dimension(350, 350));
         BufferedImage img = loadLogoFromResources("/assets/logo.png");
@@ -207,7 +184,8 @@ public class AuthPanel extends JPanel {
         JPanel features = new JPanel(new GridLayout(0, 1, 0, 10));
         features.setOpaque(false);
         features.setBorder(new EmptyBorder(20, 10, 20, 10));
-        String[] feats = { "Real-time sales & analytics", "Smart inventory & low-stock alerts", "Multi-user roles & permissions", "secure design" };
+        String[] feats = { "Real-time sales & analytics", "Smart inventory & low-stock alerts",
+                "Multi-user roles & permissions", "Secure design" };
         for (String f : feats) {
             JLabel li = new JLabel("  " + f);
             li.setFont(new Font("Segoe UI", Font.PLAIN, 13));
@@ -217,13 +195,13 @@ public class AuthPanel extends JPanel {
         }
         panel.add(features, gbc);
 
-        // Spacer to push footer to bottom (single glue)
+        // Spacer
         gbc.gridy++;
         gbc.weighty = 1.0;
         gbc.fill = GridBagConstraints.BOTH;
         panel.add(Box.createVerticalGlue(), gbc);
 
-        // Footer row: placed at bottom, left-aligned, single sentence
+        // Footer
         gbc.gridy++;
         gbc.weighty = 0;
         gbc.fill = GridBagConstraints.HORIZONTAL;
@@ -231,7 +209,6 @@ public class AuthPanel extends JPanel {
         gbc.insets = new Insets(8, 0, 0, 0);
         gbc.weightx = 1.0;
 
-        // footer panel to left-align the label
         JPanel footerPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
         footerPanel.setOpaque(false);
 
@@ -262,14 +239,10 @@ public class AuthPanel extends JPanel {
         return panel;
     }
 
-    // ---------------------------
-    // LOGIN panel
-    // ---------------------------
     private JPanel createLoginPanel() {
-        // NOTE: made opaque + dark background to match signup exactly (visual only)
         JPanel panel = new JPanel(new GridBagLayout());
         panel.setOpaque(true);
-        panel.setBackground(new Color(12, 0, 30)); // match signup background
+        panel.setBackground(new Color(12, 0, 30));
         panel.setBorder(new EmptyBorder(8, 8, 8, 8));
 
         GridBagConstraints gbc = new GridBagConstraints();
@@ -289,15 +262,15 @@ public class AuthPanel extends JPanel {
         gbc.gridy = 1;
         panel.add(sub, gbc);
 
-        // Email field (themed exactly like signup)
+        // Email field
         gbc.gridy = 2;
         panel.add(createModernInputField("Email Address", loginEmailField, "you@example.com"), gbc);
 
-        // Password field (themed exactly like signup)
+        // Password field
         gbc.gridy = 3;
         panel.add(createModernPasswordField("Password", loginPasswordField), gbc);
 
-        // Options: remember + forgot
+        // Options
         gbc.gridy = 4;
         JPanel options = new JPanel(new BorderLayout());
         options.setOpaque(false);
@@ -308,6 +281,9 @@ public class AuthPanel extends JPanel {
         JLabel forgot = new JLabel("<html><a href='#' style='color:#bde6e6'>Forgot password?</a></html>");
         forgot.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         forgot.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        forgot.addMouseListener(new MouseAdapter() {
+            @Override public void mouseClicked(MouseEvent e) { showForgotDialog(); }
+        });
         options.add(forgot, BorderLayout.EAST);
         panel.add(options, gbc);
 
@@ -333,23 +309,18 @@ public class AuthPanel extends JPanel {
         });
         panel.add(toSignup, gbc);
 
-        // Enter key behavior
+        // Enter key support
         addEnterKeySupport(loginEmailField, this::onLogin);
         addEnterKeySupport(loginPasswordField, this::onLogin);
 
         return panel;
     }
 
-    // ---------------------------
-    // SIGNUP panel
-    // ---------------------------
     private JPanel createSignupPanel() {
         JPanel panel = new JPanel(new GridBagLayout());
         panel.setBorder(new EmptyBorder(8,8,8,8));
         panel.setBackground(new Color(12,0,30));
         panel.setOpaque(true);
-
-        panel.setBorder(new EmptyBorder(8, 8, 8, 8));
 
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.fill = GridBagConstraints.HORIZONTAL;
@@ -381,22 +352,20 @@ public class AuthPanel extends JPanel {
         gbc.gridy = 5;
         panel.add(createModernPasswordField("Confirm Password", signupConfirmPasswordField), gbc);
 
-        // Role selection - made smaller and themed
+        // Role selection
         gbc.gridy = 6;
         JPanel rolePanel = new JPanel(new BorderLayout(8, 0));
-        rolePanel.setPreferredSize(new Dimension(130, 24)); // smaller role box
-        rolePanel.setOpaque(false); // transparent container so rounded input shows through
-        // role label visible on dark background
+        rolePanel.setPreferredSize(new Dimension(130, 24));
+        rolePanel.setOpaque(false);
         JLabel roleLabel = new JLabel("Role:");
         roleLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12));
-        roleLabel.setForeground(Color.white); // fixed to light color
+        roleLabel.setForeground(Color.white);
         roleLabel.setBackground(new Color(40,40,40));
         roleLabel.setOpaque(true);
         rolePanel.add(roleLabel, BorderLayout.WEST);
 
-        // style and size the combo box (smaller)
         styleComboBox(roleCombo);
-        roleCombo.setPreferredSize(new Dimension(130, 24)); // smaller role box
+        roleCombo.setPreferredSize(new Dimension(130, 24));
         rolePanel.add(roleCombo, BorderLayout.CENTER);
         panel.add(rolePanel, gbc);
 
@@ -422,7 +391,7 @@ public class AuthPanel extends JPanel {
         });
         panel.add(toLogin, gbc);
 
-        // Enter key
+        // Enter key support
         addEnterKeySupport(signupFullNameField, this::onSignup);
         addEnterKeySupport(signupEmailField, this::onSignup);
         addEnterKeySupport(signupPasswordField, this::onSignup);
@@ -432,7 +401,348 @@ public class AuthPanel extends JPanel {
     }
 
     // ---------------------------
-    // Input field factory helpers
+    // Network Actions
+    // ---------------------------
+    private void onSignup() {
+        final String fullName = signupFullNameField.getText().trim();
+        final String email = signupEmailField.getText().trim();
+        final String password = new String(signupPasswordField.getPassword());
+        final String confirm = new String(signupConfirmPasswordField.getPassword());
+        final int role = roleCombo.getSelectedIndex() == 0 ? 2 : 1;
+
+        // Validation
+        if (fullName.isEmpty() || fullName.equals("John Doe")) {
+            signupInlineMsg.setText("Please enter your full name");
+            return;
+        }
+        if (email.isEmpty() || email.equals("you@example.com")) {
+            signupInlineMsg.setText("Please enter your email address");
+            return;
+        }
+        if (!isValidEmail(email)) {
+            signupInlineMsg.setText("Please enter a valid email address");
+            return;
+        }
+        if (password.isEmpty()) {
+            signupInlineMsg.setText("Please enter a password");
+            return;
+        }
+        if (password.length() < 6) {
+            signupInlineMsg.setText("Password must be at least 6 characters");
+            return;
+        }
+        if (!password.equals(confirm)) {
+            signupInlineMsg.setText("Passwords do not match");
+            return;
+        }
+
+        signupInlineMsg.setText(" ");
+        setOverlayVisible(true);
+
+        SwingWorker<Map<String, Object>, Void> worker = new SwingWorker<Map<String, Object>, Void>() {
+            private String error = null;
+
+            @Override
+            protected Map<String, Object> doInBackground() {
+                try {
+                    BaseClient client = BaseClient.getInstance();
+                    Map<String, Object> payload = new HashMap<>();
+                    payload.put("fullName", fullName);
+                    payload.put("email", email);
+                    payload.put("password", password);
+                    payload.put("role", role);
+
+                    String response = client.post("/api/auth/signup", payload);
+                    Map<String, Object> result = client.parseResponse(response);
+
+                    if (!client.isResponseSuccessful(response)) {
+                        error = client.getResponseMessage(response);
+                        return null;
+                    }
+
+                    return (Map<String, Object>) result.get("data");
+
+                } catch (Exception ex) {
+                    error = "Network error: " + ex.getMessage();
+                    ex.printStackTrace();
+                    return null;
+                }
+            }
+
+            @Override
+            protected void done() {
+                setOverlayVisible(false);
+                try {
+                    Map<String, Object> result = get();
+                    if (error != null) {
+                        showToast(error, true);
+                        signupInlineMsg.setText(error);
+                    } else if (result != null) {
+                        showToast("Account created successfully! Please sign in.", false);
+                        clearSignupForm();
+                        switchToLogin();
+                    }
+                } catch (Exception ex) {
+                    showToast("An error occurred: " + ex.getMessage(), true);
+                }
+            }
+        };
+        worker.execute();
+    }
+
+    private void onLogin() {
+        final String email = loginEmailField.getText().trim();
+        final String password = new String(loginPasswordField.getPassword());
+
+        if (email.isEmpty() || email.equals("you@example.com")) {
+            loginInlineMsg.setText("Please enter your email address");
+            return;
+        }
+        if (!isValidEmail(email)) {
+            loginInlineMsg.setText("Please enter a valid email address");
+            return;
+        }
+        if (password.isEmpty()) {
+            loginInlineMsg.setText("Please enter your password");
+            return;
+        }
+
+        loginInlineMsg.setText(" ");
+        setOverlayVisible(true);
+
+        SwingWorker<Map<String, Object>, Void> worker = new SwingWorker<Map<String, Object>, Void>() {
+            private String error = null;
+
+            @Override
+            protected Map<String, Object> doInBackground() {
+                try {
+                    BaseClient client = BaseClient.getInstance();
+                    Map<String, Object> payload = new HashMap<>();
+                    payload.put("email", email);
+                    payload.put("password", password);
+
+                    String response = client.post("/api/auth/login", payload);
+                    Map<String, Object> result = client.parseResponse(response);
+
+                    if (!client.isResponseSuccessful(response)) {
+                        error = client.getResponseMessage(response);
+                        return null;
+                    }
+
+                    return (Map<String, Object>) result.get("data");
+
+                } catch (Exception ex) {
+                    error = "Network error: " + ex.getMessage();
+                    ex.printStackTrace();
+                    return null;
+                }
+            }
+
+            @Override
+            protected void done() {
+                setOverlayVisible(false);
+                try {
+                    Map<String, Object> result = get();
+                    if (error != null) {
+                        showToast(error, true);
+                        loginInlineMsg.setText(error);
+                    } else if (result != null) {
+                        showToast("Login successful! Welcome back.", false);
+                        loginEmailField.setText("");
+                        loginPasswordField.setText("");
+                        fetchCurrentUser();
+                    }
+                } catch (Exception ex) {
+                    ex.printStackTrace();
+                    showToast("An error occurred: " + ex.getMessage(), true);
+                }
+            }
+        };
+        worker.execute();
+    }
+
+    private void fetchCurrentUser() {
+        setOverlayVisible(true);
+        SwingWorker<Map<String, Object>, Void> worker = new SwingWorker<Map<String, Object>, Void>() {
+            private String error = null;
+
+            @Override
+            protected Map<String, Object> doInBackground() {
+                try {
+                    BaseClient client = BaseClient.getInstance();
+
+                    // First verify connection
+                    if (!client.testConnection()) {
+                        error = "Cannot connect to server. Please check your connection.";
+                        return null;
+                    }
+
+                    // Get current user
+                    String response = client.get("/api/auth/me");
+                    Map<String, Object> result = client.parseResponse(response);
+
+                    if (!client.isResponseSuccessful(response)) {
+                        error = "Session expired or invalid. Please login again.";
+                        return null;
+                    }
+
+                    Map<String, Object> userData = (Map<String, Object>) result.get("data");
+                    if (userData == null) {
+                        error = "No user data returned";
+                        return null;
+                    }
+
+                    // Validate required fields
+                    if (userData.get("id") == null || userData.get("roleId") == null) {
+                        error = "Invalid user data received";
+                        return null;
+                    }
+
+                    return userData;
+
+                } catch (Exception ex) {
+                    error = "Failed to fetch user: " + ex.getMessage();
+                    ex.printStackTrace();
+                    return null;
+                }
+            }
+
+            @Override
+            protected void done() {
+                setOverlayVisible(false);
+                try {
+                    Map<String, Object> user = get();
+                    if (error != null) {
+                        showToast(error, true);
+                        // Clear any invalid session
+                        clearInvalidSession();
+                    } else if (user != null) {
+                        // Set user data in session manager
+                        UserSessionManager sessionManager = UserSessionManager.getInstance();
+                        sessionManager.setUserData(user);
+
+                        // Show welcome message
+                        Object name = user.get("fullName") != null ? user.get("fullName") : user.get("email");
+                        Integer roleId = (Integer) user.get("roleId");
+                        String roleName = roleId == 1 ? "Administrator" : "Cashier";
+
+                        showToast("Welcome, " + name + " (" + roleName + ")", false);
+
+                        // Close login window and open dashboard
+                        Window parentWindow = SwingUtilities.getWindowAncestor(AuthPanel.this);
+                        if (parentWindow instanceof JFrame) {
+                            parentWindow.dispose();
+                        }
+
+                        // Open dashboard
+                        SwingUtilities.invokeLater(() -> {
+                            try {
+                                MainDashboard dashboard = new MainDashboard();
+                                dashboard.setVisible(true);
+
+                                // Log successful login
+                                System.out.println("User logged in successfully: " + name + ", Role: " + roleName);
+
+                            } catch (Exception ex) {
+                                ex.printStackTrace();
+                                showToast("Failed to initialize dashboard: " + ex.getMessage(), true);
+
+                                // Fallback to login screen
+                                showLoginScreen();
+                            }
+                        });
+                    } else {
+                        showToast("Authenticated but no user details returned.", true);
+                    }
+                } catch (Exception ex) {
+                    ex.printStackTrace();
+                    showToast("An error occurred: " + ex.getMessage(), true);
+                    clearInvalidSession();
+                }
+            }
+        };
+        worker.execute();
+    }
+
+    private void clearInvalidSession() {
+        SwingWorker<Void, Void> worker = new SwingWorker<Void, Void>() {
+            @Override
+            protected Void doInBackground() {
+                try {
+                    BaseClient client = BaseClient.getInstance();
+                    client.logout();
+                } catch (Exception ex) {
+                    // Silent fail
+                }
+                UserSessionManager.getInstance().logout();
+                return null;
+            }
+        };
+        worker.execute();
+    }
+
+    private void showForgotDialog() {
+        String email = JOptionPane.showInputDialog(
+                SwingUtilities.getWindowAncestor(this),
+                "Enter your account email:",
+                "Forgot Password",
+                JOptionPane.PLAIN_MESSAGE
+        );
+
+        if (email == null || email.trim().isEmpty()) return;
+
+        if (!isValidEmail(email.trim())) {
+            showToast("Please enter a valid email address", true);
+            return;
+        }
+
+        setOverlayVisible(true);
+        SwingWorker<String, Void> worker = new SwingWorker<String, Void>() {
+            private String error = null;
+
+            @Override
+            protected String doInBackground() {
+                try {
+                    BaseClient client = BaseClient.getInstance();
+                    Map<String, Object> payload = new HashMap<>();
+                    payload.put("email", email.trim());
+
+                    String response = client.post("/api/auth/forgot-password", payload);
+                    Map<String, Object> result = client.parseResponse(response);
+
+                    if (!client.isResponseSuccessful(response)) {
+                        error = client.getResponseMessage(response);
+                        return null;
+                    }
+
+                    return client.getResponseMessage(response);
+
+                } catch (Exception ex) {
+                    error = "Network error: " + ex.getMessage();
+                    return null;
+                }
+            }
+
+            @Override
+            protected void done() {
+                setOverlayVisible(false);
+                try {
+                    String result = get();
+                    if (error != null) {
+                        showToast(error, true);
+                    } else {
+                        showToast("If the email exists, an OTP was sent. Check your email.", false);
+                    }
+                } catch (Exception ex) {
+                    showToast("An error occurred: " + ex.getMessage(), true);
+                }
+            }
+        };
+        worker.execute();
+    }
+
+    // ---------------------------
+    // UI Helper Methods
     // ---------------------------
     private JPanel createModernInputField(String label, JTextField textField, String placeholder) {
         JPanel panel = new JPanel(new BorderLayout(0, 6));
@@ -446,18 +756,15 @@ public class AuthPanel extends JPanel {
         RoundedInput input = new RoundedInput(textField);
         input.setPreferredSize(new Dimension(380, 44));
 
-        // make the text field transparent so rounded container paints the background
         textField.setOpaque(false);
         textField.setBorder(BorderFactory.createEmptyBorder());
         textField.setFont(new Font("Segoe UI", Font.PLAIN, 14));
         textField.setCaretColor(new Color(12, 97, 103));
 
-        // placeholder color: light gray; typed color: white
         textField.setText(placeholder);
         textField.setForeground(new Color(150, 150, 150));
         textField.setToolTipText(label);
 
-        // placeholder focus behaviour
         textField.addFocusListener(new FocusAdapter() {
             @Override public void focusGained(FocusEvent e) {
                 if (textField.getText().equals(placeholder)) {
@@ -497,7 +804,7 @@ public class AuthPanel extends JPanel {
         passwordField.setOpaque(false);
         passwordField.setBorder(BorderFactory.createEmptyBorder());
         passwordField.setFont(new Font("Segoe UI", Font.PLAIN, 14));
-        passwordField.setForeground(Color.WHITE); // typed password text is white
+        passwordField.setForeground(Color.WHITE);
         passwordField.setCaretColor(new Color(12, 97, 103));
         passwordField.setEchoChar('•');
         passwordField.setToolTipText(label);
@@ -522,9 +829,6 @@ public class AuthPanel extends JPanel {
         return panel;
     }
 
-    // ---------------------------
-    // Styling helpers
-    // ---------------------------
     private void stylePrimaryButton(JButton button) {
         button.setFocusPainted(false);
         button.setBorder(BorderFactory.createEmptyBorder(10, 16, 10, 16));
@@ -558,7 +862,6 @@ public class AuthPanel extends JPanel {
     }
 
     private void styleComboBox(JComboBox<String> combo) {
-        // Dark background and white text for readability
         combo.setBackground(new Color(40, 40, 40));
         combo.setForeground(Color.black);
         combo.setFont(new Font("Segoe UI", Font.PLAIN, 13));
@@ -567,10 +870,11 @@ public class AuthPanel extends JPanel {
                 BorderFactory.createEmptyBorder(4,8,4,8)
         ));
         combo.setFocusable(false);
-        combo.setOpaque(true); // show dark background
+        combo.setOpaque(true);
         combo.setRenderer(new DefaultListCellRenderer() {
             @Override
-            public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
+            public Component getListCellRendererComponent(JList<?> list, Object value, int index,
+                                                          boolean isSelected, boolean cellHasFocus) {
                 super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
                 setOpaque(true);
                 setBackground(isSelected ? new Color(12,97,103) : new Color(40,40,40));
@@ -583,168 +887,7 @@ public class AuthPanel extends JPanel {
     }
 
     // ---------------------------
-    // Network actions: signup/login
-    // (logic unchanged)
-    // ---------------------------
-    private void onSignup() {
-        final String fullName = signupFullNameField.getText().trim();
-        final String email = signupEmailField.getText().trim();
-        final String password = new String(signupPasswordField.getPassword());
-        final String confirm = new String(signupConfirmPasswordField.getPassword());
-        final int role = roleCombo.getSelectedIndex() == 0 ? 2 : 1;
-
-        // Local validation
-        if (fullName.isEmpty() || fullName.equals("John Doe")) {
-            signupInlineMsg.setText("Please enter your full name");
-            return;
-        }
-        if (email.isEmpty() || email.equals("you@example.com")) {
-            signupInlineMsg.setText("Please enter your email address");
-            return;
-        }
-        if (!isValidEmail(email)) {
-            signupInlineMsg.setText("Please enter a valid email address");
-            return;
-        }
-        if (password.isEmpty()) {
-            signupInlineMsg.setText("Please enter a password");
-            return;
-        }
-        if (password.length() < 6) {
-            signupInlineMsg.setText("Password must be at least 6 characters");
-            return;
-        }
-        if (!password.equals(confirm)) {
-            signupInlineMsg.setText("Passwords do not match");
-            return;
-        }
-
-        signupInlineMsg.setText(" ");
-        setOverlayVisible(true);
-
-        SwingWorker<String, Void> worker = new SwingWorker<String, Void>() {
-            private String error = null;
-
-            @Override
-            protected String doInBackground() {
-                Map<String, Object> payload = new HashMap<>();
-                payload.put("fullName", fullName);
-                payload.put("email", email);
-                payload.put("password", password);
-                payload.put("role", role);
-
-                try {
-                    String json = mapper.writeValueAsString(payload);
-                    RequestBody body = RequestBody.create(json, JSON);
-                    Request req = new Request.Builder().url(API_BASE + "/api/auth/signup").post(body).build();
-
-                    try (Response res = httpClient.newCall(req).execute()) {
-                        String resp = res.body() != null ? res.body().string() : "";
-                        if (!res.isSuccessful()) {
-                            error = "Signup failed: " + tryExtractMessage(resp);
-                            return null;
-                        }
-                        return tryExtractMessage(resp);
-                    }
-                } catch (IOException ex) {
-                    error = "Network error: " + ex.getMessage();
-                    return null;
-                }
-            }
-
-            @Override
-            protected void done() {
-                setOverlayVisible(false);
-                try {
-                    String result = get();
-                    if (error != null) {
-                        showToast(error, true);
-                        signupInlineMsg.setText(error);
-                    } else {
-                        showToast("Account created successfully! Please sign in.", false);
-                        clearSignupForm();
-                        switchToLogin();
-                    }
-                } catch (Exception ex) {
-                    showToast("An error occurred: " + ex.getMessage(), true);
-                }
-            }
-        };
-        worker.execute();
-    }
-
-    private void onLogin() {
-        final String email = loginEmailField.getText().trim();
-        final String password = new String(loginPasswordField.getPassword());
-
-        if (email.isEmpty() || email.equals("you@example.com")) {
-            loginInlineMsg.setText("Please enter your email address");
-            return;
-        }
-        if (!isValidEmail(email)) {
-            loginInlineMsg.setText("Please enter a valid email address");
-            return;
-        }
-        if (password.isEmpty()) {
-            loginInlineMsg.setText("Please enter your password");
-            return;
-        }
-
-        loginInlineMsg.setText(" ");
-        setOverlayVisible(true);
-
-        SwingWorker<String, Void> worker = new SwingWorker<String, Void>() {
-            private String error = null;
-
-            @Override
-            protected String doInBackground() {
-                Map<String, Object> payload = new HashMap<>();
-                payload.put("email", email);
-                payload.put("password", password);
-
-                try {
-                    String json = mapper.writeValueAsString(payload);
-                    RequestBody body = RequestBody.create(json, JSON);
-                    Request req = new Request.Builder().url(API_BASE + "/api/auth/login").post(body).build();
-
-                    try (Response res = httpClient.newCall(req).execute()) {
-                        String resp = res.body() != null ? res.body().string() : "";
-                        if (!res.isSuccessful()) {
-                            error = "Login failed: " + tryExtractMessage(resp);
-                            return null;
-                        }
-                        return tryExtractMessage(resp);
-                    }
-                } catch (IOException ex) {
-                    error = "Network error: " + ex.getMessage();
-                    return null;
-                }
-            }
-
-            @Override
-            protected void done() {
-                setOverlayVisible(false);
-                try {
-                    String result = get();
-                    if (error != null) {
-                        showToast(error, true);
-                        loginInlineMsg.setText(error);
-                    } else {
-                        showToast("Login successful! Welcome back.", false);
-                        loginEmailField.setText("");
-                        loginPasswordField.setText("");
-                        // TODO: hook into app navigation for post-login
-                    }
-                } catch (Exception ex) {
-                    showToast("An error occurred: " + ex.getMessage(), true);
-                }
-            }
-        };
-        worker.execute();
-    }
-
-    // ---------------------------
-    // Overlay control
+    // Utility Methods
     // ---------------------------
     private void setOverlayVisible(boolean visible) {
         overlayLayer.setVisible(visible);
@@ -754,9 +897,6 @@ public class AuthPanel extends JPanel {
         loginBtn.setEnabled(!visible);
     }
 
-    // ---------------------------
-    // Utilities
-    // ---------------------------
     private boolean isValidEmail(String email) {
         return Pattern.compile("^[\\w-.]+@([\\w-]+\\.)+[\\w-]{2,}$").matcher(email).matches();
     }
@@ -772,20 +912,11 @@ public class AuthPanel extends JPanel {
         signupInlineMsg.setText(" ");
     }
 
-    private String tryExtractMessage(String json) {
-        if (json == null || json.isEmpty()) return "Operation completed";
-        try {
-            Map<?,?> map = mapper.readValue(json, Map.class);
-            Object m = map.get("message");
-            if (m != null) return m.toString();
-        } catch (Exception ignored) {}
-        return "Operation completed";
-    }
-
     private void showToast(String msg, boolean error) {
         JWindow toast = new JWindow();
         toast.setLayout(new BorderLayout());
         JLabel label = new JLabel(msg, SwingConstants.CENTER);
+        System.out.println(msg);
         label.setBorder(new EmptyBorder(12, 20, 12, 20));
         label.setOpaque(true);
         label.setBackground(error ? new Color(220,80,80) : new Color(12,97,103));
@@ -798,11 +929,16 @@ public class AuthPanel extends JPanel {
             Point frameLoc = getLocationOnScreen();
             Dimension frameSize = getSize();
             Dimension toastSize = toast.getSize();
-            toast.setLocation(frameLoc.x + (frameSize.width - toastSize.width)/2,
-                    frameLoc.y + frameSize.height - toastSize.height - 20);
+            toast.setLocation(
+                    frameLoc.x + (frameSize.width - toastSize.width)/2,
+                    frameLoc.y + frameSize.height - toastSize.height - 20
+            );
         } catch (Exception ex) {
             Dimension screen = Toolkit.getDefaultToolkit().getScreenSize();
-            toast.setLocation((screen.width - toast.getWidth())/2, screen.height - toast.getHeight() - 100);
+            toast.setLocation(
+                    (screen.width - toast.getWidth())/2,
+                    screen.height - toast.getHeight() - 100
+            );
         }
 
         toast.setVisible(true);
@@ -812,14 +948,38 @@ public class AuthPanel extends JPanel {
     }
 
     private void addEnterKeySupport(JComponent component, Runnable action) {
-        component.getInputMap(JComponent.WHEN_FOCUSED).put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0), "submit");
+        component.getInputMap(JComponent.WHEN_FOCUSED)
+                .put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0), "submit");
         component.getActionMap().put("submit", new AbstractAction() {
             @Override public void actionPerformed(ActionEvent e) { action.run(); }
         });
     }
 
+    private void switchToLogin() {
+        isLoginMode = true;
+        cardLayout.show(authCards, "LOGIN");
+        SwingUtilities.invokeLater(loginEmailField::requestFocusInWindow);
+    }
+
+    private void switchToSignup() {
+        isLoginMode = false;
+        cardLayout.show(authCards, "SIGNUP");
+        SwingUtilities.invokeLater(signupFullNameField::requestFocusInWindow);
+    }
+
+    private void showLoginScreen() {
+        SwingUtilities.invokeLater(() -> {
+            JFrame frame = new JFrame("Win POS Pro - Login");
+            frame.setContentPane(new AuthPanel());
+            frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+            frame.setSize(1200, 700);
+            frame.setLocationRelativeTo(null);
+            frame.setVisible(true);
+        });
+    }
+
     // ---------------------------
-    // Small UI assets / icons
+    // Icon Creation Methods
     // ---------------------------
     private Image createCheckIcon() {
         int s = 16;
@@ -850,12 +1010,17 @@ public class AuthPanel extends JPanel {
         BufferedImage img = new BufferedImage(dim, dim, BufferedImage.TYPE_INT_ARGB);
         Graphics2D g = img.createGraphics();
         g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-        g.setColor(new Color(255,255,255,30)); g.fillOval(4,4,dim-8,dim-8);
+        g.setColor(new Color(255,255,255,30));
+        g.fillOval(4,4,dim-8,dim-8);
         GradientPaint gp = new GradientPaint(0,0,new Color(255,255,255,150), dim, dim, new Color(255,255,255,50));
-        g.setPaint(gp); g.fillOval(10,10,dim-20,dim-20);
-        g.setFont(new Font("Segoe UI", Font.BOLD, dim/2)); g.setColor(new Color(6,84,92));
-        FontMetrics fm = g.getFontMetrics(); String t = "W";
-        int tx = (dim - fm.stringWidth(t))/2; int ty = (dim + fm.getAscent())/2 - fm.getDescent();
+        g.setPaint(gp);
+        g.fillOval(10,10,dim-20,dim-20);
+        g.setFont(new Font("Segoe UI", Font.BOLD, dim/2));
+        g.setColor(new Color(6,84,92));
+        FontMetrics fm = g.getFontMetrics();
+        String t = "W";
+        int tx = (dim - fm.stringWidth(t))/2;
+        int ty = (dim + fm.getAscent())/2 - fm.getDescent();
         g.drawString(t, tx, ty);
         g.dispose();
         return img;
@@ -875,13 +1040,9 @@ public class AuthPanel extends JPanel {
         return src.getScaledInstance(nw, nh, Image.SCALE_SMOOTH);
     }
 
-    // ---------------------------
-    // Loading overlay component
-    // ---------------------------
     private JComponent createLoadingOverlay() {
         JPanel root = new JPanel(new GridBagLayout()) {
             @Override protected void paintComponent(Graphics g) {
-                // semi-transparent black overlay
                 g.setColor(new Color(0, 0, 0, 160));
                 g.fillRect(0, 0, getWidth(), getHeight());
             }
@@ -908,7 +1069,8 @@ public class AuthPanel extends JPanel {
                 super.paintComponent(g);
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                int w = getWidth(), h = getHeight(); int cx = w/2, cy = h/2, r = Math.min(cx,cy) - 6;
+                int w = getWidth(), h = getHeight();
+                int cx = w/2, cy = h/2, r = Math.min(cx,cy) - 6;
                 g2.setStroke(new BasicStroke(3f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
                 g2.setColor(new Color(12,97,103));
                 g2.drawArc(cx-r, cy-r, r*2, r*2, (int)Math.toDegrees(a), 260);
@@ -928,22 +1090,7 @@ public class AuthPanel extends JPanel {
     }
 
     // ---------------------------
-    // Card switching
-    // ---------------------------
-    private void switchToLogin() {
-        isLoginMode = true;
-        cardLayout.show(authCards, "LOGIN");
-        SwingUtilities.invokeLater(() -> loginEmailField.requestFocusInWindow());
-    }
-
-    private void switchToSignup() {
-        isLoginMode = false;
-        cardLayout.show(authCards, "SIGNUP");
-        SwingUtilities.invokeLater(() -> signupFullNameField.requestFocusInWindow());
-    }
-
-    // ---------------------------
-    // Rounded input container
+    // Inner Classes
     // ---------------------------
     private static class RoundedInput extends JPanel {
         RoundedInput(JComponent child) {
@@ -962,7 +1109,12 @@ public class AuthPanel extends JPanel {
             g2.fillRoundRect(0,0,w,h,12,12);
 
             boolean focused = false;
-            for (Component c : getComponents()) if (c.isFocusOwner()) { focused = true; break; }
+            for (Component c : getComponents()) {
+                if (c.isFocusOwner()) {
+                    focused = true;
+                    break;
+                }
+            }
 
             if (focused) {
                 g2.setColor(new Color(12,97,103));
