@@ -1,15 +1,23 @@
 package olkalouwaithakaautospares.co.ke.win.ui.dashboard.home;
 
 import olkalouwaithakaautospares.co.ke.win.utils.BaseClient;
+import olkalouwaithakaautospares.co.ke.win.utils.UserSessionManager;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.core.type.TypeReference;
+
 import javax.swing.*;
+import javax.swing.Timer;
 import java.awt.*;
+import java.text.DecimalFormat;
 import java.time.LocalDate;
-import java.util.Map;
+import java.time.format.DateTimeFormatter;
+import java.util.*;
+import java.util.List;
 
 public class DashboardHome extends JPanel {
-    private BaseClient client;
-    private ObjectMapper mapper;
+    private final BaseClient client;
+    private final ObjectMapper mapper;
+    private final UserSessionManager session;
 
     // Stat card labels
     private JLabel totalSalesLabel;
@@ -19,18 +27,56 @@ public class DashboardHome extends JPanel {
     private JLabel lowStockLabel;
     private JLabel creditSalesLabel;
 
+    // Description labels
+    private JLabel totalSalesDesc;
+    private JLabel todayRevenueDesc;
+    private JLabel newCustomersDesc;
+    private JLabel pendingReturnsDesc;
+    private JLabel lowStockDesc;
+    private JLabel creditSalesDesc;
+
+    // Refresh button
+    private JButton refreshBtn;
+
+    // Date formatter (consistent with Reports)
+    private final DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+
+    // Data caches (like in Reports panel)
+    private final List<Map<String, Object>> salesData = new ArrayList<>();
+    private final List<Map<String, Object>> returnsData = new ArrayList<>();
+    private final List<Map<String, Object>> productsData = new ArrayList<>();
+    private final List<Map<String, Object>> stockBatchesData = new ArrayList<>();
+    private final List<Map<String, Object>> customersData = new ArrayList<>();
+
     public DashboardHome() {
         this.client = BaseClient.getInstance();
         this.mapper = client.getMapper();
+        this.session = UserSessionManager.getInstance();
         initUI();
         loadDashboardData();
+
+        // Auto-refresh every 30 seconds
+        Timer timer = new Timer(30000, e -> loadDashboardData());
+        timer.setRepeats(true);
+        timer.start();
     }
 
+    // ---------- UI Initialization ----------
     private void initUI() {
         setLayout(new BorderLayout());
         setBackground(new Color(245, 247, 250));
 
         // Header
+        JPanel header = createHeader();
+        add(header, BorderLayout.NORTH);
+
+        // Stats cards
+        JPanel statsPanel = createStatsPanel();
+        add(statsPanel, BorderLayout.CENTER);
+
+    }
+
+    private JPanel createHeader() {
         JPanel header = new JPanel(new BorderLayout());
         header.setBackground(Color.WHITE);
         header.setBorder(BorderFactory.createEmptyBorder(20, 30, 20, 30));
@@ -39,15 +85,13 @@ public class DashboardHome extends JPanel {
         title.setFont(new Font("Segoe UI", Font.BOLD, 24));
         title.setForeground(new Color(30, 33, 57));
 
-        JLabel date = new JLabel(LocalDate.now().toString());
+        String today = LocalDate.now().format(DateTimeFormatter.ofPattern("EEEE, MMMM d, yyyy"));
+        JLabel date = new JLabel(today);
         date.setFont(new Font("Segoe UI", Font.PLAIN, 14));
         date.setForeground(new Color(150, 150, 150));
 
-        JButton refreshBtn = new JButton("Refresh");
-        refreshBtn.setBackground(new Color(33, 150, 243));
-        refreshBtn.setForeground(Color.WHITE);
-        refreshBtn.setBorderPainted(false);
-        refreshBtn.setFocusPainted(false);
+        refreshBtn = new JButton("Refresh");
+        styleButton(refreshBtn, new Color(33, 150, 243));
         refreshBtn.addActionListener(e -> loadDashboardData());
 
         JPanel rightPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
@@ -58,11 +102,7 @@ public class DashboardHome extends JPanel {
         header.add(date, BorderLayout.CENTER);
         header.add(rightPanel, BorderLayout.EAST);
 
-        add(header, BorderLayout.NORTH);
-
-        // Stats cards
-        JPanel statsPanel = createStatsPanel();
-        add(statsPanel, BorderLayout.CENTER);
+        return header;
     }
 
     private JPanel createStatsPanel() {
@@ -76,95 +116,83 @@ public class DashboardHome extends JPanel {
         gbc.weightx = 1.0;
         gbc.weighty = 1.0;
 
-        // Create stat cards with default values
+        // Create stat cards with loading state
         totalSalesLabel = new JLabel("₦ 0.00");
+        totalSalesLabel.setFont(new Font("Segoe UI", Font.BOLD, 28));
+        totalSalesDesc = new JLabel("Loading...");
+
         todayRevenueLabel = new JLabel("₦ 0.00");
+        todayRevenueLabel.setFont(new Font("Segoe UI", Font.BOLD, 28));
+        todayRevenueDesc = new JLabel("Loading...");
+
         newCustomersLabel = new JLabel("0");
+        newCustomersLabel.setFont(new Font("Segoe UI", Font.BOLD, 28));
+        newCustomersDesc = new JLabel("Loading...");
+
         pendingReturnsLabel = new JLabel("0");
+        pendingReturnsLabel.setFont(new Font("Segoe UI", Font.BOLD, 28));
+        pendingReturnsDesc = new JLabel("Loading...");
+
         lowStockLabel = new JLabel("0");
+        lowStockLabel.setFont(new Font("Segoe UI", Font.BOLD, 28));
+        lowStockDesc = new JLabel("Loading...");
+
         creditSalesLabel = new JLabel("₦ 0.00");
+        creditSalesLabel.setFont(new Font("Segoe UI", Font.BOLD, 28));
+        creditSalesDesc = new JLabel("Loading...");
 
         gbc.gridx = 0; gbc.gridy = 0;
-        panel.add(createStatCard("Total Sales", totalSalesLabel, "Loading...",
+        panel.add(createStatCard("Total Sales", totalSalesLabel, totalSalesDesc,
                 new Color(76, 175, 80)), gbc);
 
         gbc.gridx = 1;
-        panel.add(createStatCard("Today's Revenue", todayRevenueLabel, "Loading...",
+        panel.add(createStatCard("Today's Revenue", todayRevenueLabel, todayRevenueDesc,
                 new Color(33, 150, 243)), gbc);
 
         gbc.gridx = 2;
-        panel.add(createStatCard("New Customers", newCustomersLabel, "Loading...",
+        panel.add(createStatCard("New Customers", newCustomersLabel, newCustomersDesc,
                 new Color(156, 39, 176)), gbc);
 
         gbc.gridx = 0; gbc.gridy = 1;
-        panel.add(createStatCard("Pending Returns", pendingReturnsLabel, "Loading...",
+        panel.add(createStatCard("Pending Returns", pendingReturnsLabel, pendingReturnsDesc,
                 new Color(255, 152, 0)), gbc);
 
         gbc.gridx = 1;
-        panel.add(createStatCard("Low Stock Items", lowStockLabel, "Loading...",
+        panel.add(createStatCard("Low Stock Items", lowStockLabel, lowStockDesc,
                 new Color(244, 67, 54)), gbc);
 
         gbc.gridx = 2;
-        panel.add(createStatCard("Credit Sales", creditSalesLabel, "Loading...",
+        panel.add(createStatCard("Credit Sales", creditSalesLabel, creditSalesDesc,
                 new Color(96, 125, 139)), gbc);
 
         return panel;
     }
 
+
+    private void styleButton(JButton button, Color color) {
+        button.setFont(new Font("Segoe UI", Font.BOLD, 14));
+        button.setBackground(color);
+        button.setForeground(Color.WHITE);
+        button.setBorderPainted(false);
+        button.setFocusPainted(false);
+        button.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        button.setBorder(BorderFactory.createEmptyBorder(10, 20, 10, 20));
+    }
+
+    // ---------- Data Loading Methods (Reports-style) ----------
     private void loadDashboardData() {
-        SwingWorker<Void, Void> worker = new SwingWorker<Void, Void>() {
+        refreshBtn.setEnabled(false);
+        refreshBtn.setText("Loading...");
+
+        SwingWorker<Void, Void> worker = new SwingWorker<>() {
             private Exception error = null;
-            private Map<String, Object> dailyReport = null;
-            private Map<String, Object> customerAnalytics = null;
+            private DashboardStats stats = new DashboardStats();
 
             @Override
             protected Void doInBackground() {
                 try {
-                    // Get today's date
-                    String today = LocalDate.now().toString();
-
-                    // Fetch daily sales report
-                    try {
-                        String reportResponse = client.get("/api/secure/reports/daily?date=" + today);
-                        if (reportResponse != null && !reportResponse.trim().isEmpty()) {
-                            Map<String, Object> result = client.parseResponse(reportResponse);
-                            if (result != null) {
-                                if (result.containsKey("data") && result.get("data") instanceof Map) {
-                                    @SuppressWarnings("unchecked")
-                                    Map<String, Object> data = (Map<String, Object>) result.get("data");
-                                    dailyReport = data;
-                                } else {
-                                    // If response is direct data (not wrapped)
-                                    dailyReport = result;
-                                }
-                            }
-                        }
-                    } catch (Exception e) {
-                        System.err.println("Error fetching daily report: " + e.getMessage());
-                        // Continue with other requests
-                    }
-
-                    // Fetch customer analytics
-                    try {
-                        String analyticsResponse = client.get("/api/secure/customers/analytics?date=" + today);
-                        if (analyticsResponse != null && !analyticsResponse.trim().isEmpty()) {
-                            Map<String, Object> result = client.parseResponse(analyticsResponse);
-                            if (result != null) {
-                                if (result.containsKey("data") && result.get("data") instanceof Map) {
-                                    @SuppressWarnings("unchecked")
-                                    Map<String, Object> data = (Map<String, Object>) result.get("data");
-                                    customerAnalytics = data;
-                                } else {
-                                    // If response is direct data (not wrapped)
-                                    customerAnalytics = result;
-                                }
-                            }
-                        }
-                    } catch (Exception e) {
-                        System.err.println("Error fetching customer analytics: " + e.getMessage());
-                        // Continue with other requests
-                    }
-
+                    loadAllData();
+                    calculateStats();
                 } catch (Exception e) {
                     error = e;
                     e.printStackTrace();
@@ -174,118 +202,205 @@ public class DashboardHome extends JPanel {
 
             @Override
             protected void done() {
-                try {
+                SwingUtilities.invokeLater(() -> {
+                    refreshBtn.setEnabled(true);
+                    refreshBtn.setText("⟳ Refresh");
+
                     if (error != null) {
                         showError("Failed to load dashboard data: " + error.getMessage());
                         return;
                     }
 
-                    // Update UI with fetched data
-                    updateStatsUI();
-
-                } catch (Exception e) {
-                    showError("Error updating UI: " + e.getMessage());
-                }
+                    updateDashboardUI(stats);
+                });
             }
 
-            private void updateStatsUI() {
+            private void loadAllData() throws Exception {
+                // Clear previous data
+                salesData.clear();
+                returnsData.clear();
+                productsData.clear();
+                stockBatchesData.clear();
+                customersData.clear();
+
+                // Load all data in sequence (could be parallelized if needed)
+                salesData.addAll(loadSalesData());
+                returnsData.addAll(loadReturnsData());
+                productsData.addAll(loadProductsData());
+                stockBatchesData.addAll(loadStockBatchesData());
+                customersData.addAll(loadCustomersData());
+            }
+
+            private List<Map<String, Object>> loadSalesData() throws Exception {
+                return loadDataList("/api/secure/sales");
+            }
+
+            private List<Map<String, Object>> loadReturnsData() throws Exception {
+                return loadDataList("/api/secure/returns");
+            }
+
+            private List<Map<String, Object>> loadProductsData() throws Exception {
+                return loadDataList("/api/secure/products");
+            }
+
+            private List<Map<String, Object>> loadStockBatchesData() throws Exception {
+                return loadDataList("/api/secure/stock-batches");
+            }
+
+            private List<Map<String, Object>> loadCustomersData() throws Exception {
+                return loadDataList("/api/secure/customers");
+            }
+
+            private List<Map<String, Object>> loadDataList(String endpoint) throws Exception {
+                String response = client.get(endpoint);
+                if (response != null && !response.trim().isEmpty()) {
+                    try {
+                        return mapper.readValue(response, new TypeReference<List<Map<String, Object>>>() {});
+                    } catch (Exception ex) {
+                        // Try to parse as wrapped response (like Reports does)
+                        Map<String, Object> parsed = mapper.readValue(response, new TypeReference<Map<String, Object>>() {});
+                        if (parsed != null && parsed.containsKey("data") && parsed.get("data") instanceof List) {
+                            return (List<Map<String, Object>>) parsed.get("data");
+                        }
+                        return new ArrayList<>();
+                    }
+                }
+                return new ArrayList<>();
+            }
+
+            private void calculateStats() {
+                String today = LocalDate.now().format(dateFormatter);
+
+                // Reset stats
+                stats = new DashboardStats();
+
+                // Calculate sales statistics
+                for (Map<String, Object> sale : salesData) {
+                    Double total = safeDouble(sale.get("totalAmount"));
+                    if (total == null) continue;
+
+                    stats.totalSales += total;
+
+                    String saleDate = safeString(sale.get("saleDate"));
+                    if (saleDate != null && saleDate.contains(today)) {
+                        stats.todayRevenue += total;
+                        stats.todaySalesCount++;
+                    }
+
+                    String paymentStatus = safeString(sale.get("paymentStatus"));
+                    if ("CREDIT".equalsIgnoreCase(paymentStatus)) {
+                        stats.creditSales += total;
+                        stats.creditTransactions++;
+                    }
+                }
+
+                // Calculate returns statistics
+                for (Map<String, Object> ret : returnsData) {
+                    String status = safeString(ret.get("status"));
+                    if ("PENDING".equalsIgnoreCase(status)) {
+                        stats.pendingReturns++;
+                    }
+                }
+
+                // Calculate low stock items
+                for (Map<String, Object> product : productsData) {
+                    Integer prodId = safeInteger(product.get("id"));
+                    Integer reorderLevel = safeInteger(product.get("reorderLevel"), 0);
+
+                    int stock = calculateProductStock(prodId);
+                    if (stock <= reorderLevel && stock > 0) {
+                        stats.lowStockItems++;
+                    }
+                }
+
+                // Calculate new customers
+                for (Map<String, Object> customer : customersData) {
+                    String createdAt = safeString(customer.get("createdAt"));
+                    if (createdAt != null && createdAt.contains(today)) {
+                        stats.newCustomers++;
+                    }
+                }
+
+                // --- Override credit totals using the reports API for today's date (authoritative) ---
                 try {
-                    // Update daily report stats
-                    if (dailyReport != null) {
-                        try {
-                            Double totalSales = getDoubleValue(dailyReport, "totalSales");
-                            Double creditSales = getDoubleValue(dailyReport, "creditSales");
-                            Double paidSales = getDoubleValue(dailyReport, "paidSales");
-
-                            totalSalesLabel.setText(String.format("₦ %,.2f", totalSales));
-                            todayRevenueLabel.setText(String.format("₦ %,.2f", paidSales));
-                            creditSalesLabel.setText(String.format("₦ %,.2f", creditSales));
-
-                            // Update descriptions
-                            updateCardDescription(0, String.format("Total: ₦ %,.2f", totalSales));
-                            updateCardDescription(1, String.format("Paid: ₦ %,.2f", paidSales));
-                            updateCardDescription(5, String.format("Credit: ₦ %,.2f", creditSales));
-                        } catch (Exception e) {
-                            System.err.println("Error parsing daily report: " + e.getMessage());
-                        }
+                    Map<String, Object> dailyReport = loadDailyReport(today);
+                    if (dailyReport != null && !dailyReport.isEmpty()) {
+                        stats.creditSales = safeDouble(dailyReport.get("creditSales"));
+                        stats.creditTransactions = safeInteger(dailyReport.get("creditTransactions"));
                     }
-
-                    // Update customer analytics
-                    if (customerAnalytics != null) {
-                        try {
-                            Integer newCustomers = getIntegerValue(customerAnalytics, "newCustomers");
-                            Integer totalCustomers = getIntegerValue(customerAnalytics, "totalCustomers");
-
-                            newCustomersLabel.setText(String.valueOf(newCustomers));
-                            updateCardDescription(2, String.format("Total: %d customers", totalCustomers));
-                        } catch (Exception e) {
-                            System.err.println("Error parsing customer analytics: " + e.getMessage());
-                        }
-                    }
-
-                    // Set default values for pending returns and low stock
-                    pendingReturnsLabel.setText("0");
-                    lowStockLabel.setText("0");
-                    updateCardDescription(3, "No returns pending");
-                    updateCardDescription(4, "All stock levels good");
-
-                } catch (Exception e) {
-                    System.err.println("Error updating stats UI: " + e.getMessage());
+                } catch (Exception ex) {
+                    // If the API call fails, keep the local-sum values we already computed.
+                    ex.printStackTrace();
                 }
             }
 
-            private Double getDoubleValue(Map<String, Object> map, String key) {
-                if (map == null || !map.containsKey(key)) {
-                    return 0.0;
-                }
-                Object value = map.get(key);
-                if (value instanceof Number) {
-                    return ((Number) value).doubleValue();
-                } else if (value instanceof String) {
-                    try {
-                        return Double.parseDouble((String) value);
-                    } catch (NumberFormatException e) {
-                        return 0.0;
+
+            private int calculateProductStock(Integer productId) {
+                int stock = 0;
+                for (Map<String, Object> batch : stockBatchesData) {
+                    if (safeInteger(batch.get("productId")).equals(productId)) {
+                        stock += safeInteger(batch.get("quantityRemaining"), 0);
                     }
                 }
-                return 0.0;
-            }
-
-            private Integer getIntegerValue(Map<String, Object> map, String key) {
-                if (map == null || !map.containsKey(key)) {
-                    return 0;
-                }
-                Object value = map.get(key);
-                if (value instanceof Number) {
-                    return ((Number) value).intValue();
-                } else if (value instanceof String) {
-                    try {
-                        return Integer.parseInt((String) value);
-                    } catch (NumberFormatException e) {
-                        return 0;
-                    }
-                }
-                return 0;
-            }
-
-            private void updateCardDescription(int cardIndex, String description) {
-                // This is a simplified version - in a real app, you'd have references to the description labels
-                System.out.println("Card " + cardIndex + ": " + description);
+                return stock;
             }
         };
+
         worker.execute();
     }
 
-    private void showError(String message) {
-        SwingUtilities.invokeLater(() -> {
-            JOptionPane.showMessageDialog(this,
-                    message,
-                    "Error",
-                    JOptionPane.ERROR_MESSAGE);
-        });
+    // ---------- UI Update Methods ----------
+    private void updateDashboardUI(DashboardStats stats) {
+        DecimalFormat df = new DecimalFormat("#,##0.00");
+
+        // Update value labels
+        totalSalesLabel.setText("₦ " + df.format(stats.totalSales));
+        todayRevenueLabel.setText("₦ " + df.format(stats.todayRevenue));
+        newCustomersLabel.setText(String.valueOf(stats.newCustomers));
+        pendingReturnsLabel.setText(String.valueOf(stats.pendingReturns));
+        lowStockLabel.setText(String.valueOf(stats.lowStockItems));
+        creditSalesLabel.setText("₦ " + df.format(stats.creditSales));
+
+        // Update description labels
+        totalSalesDesc.setText(String.format("%d transactions", salesData.size()));
+        todayRevenueDesc.setText(String.format("%d sales today", stats.todaySalesCount));
+        newCustomersDesc.setText(String.format("%d total customers", customersData.size()));
+        pendingReturnsDesc.setText(String.format("%d total returns", returnsData.size()));
+        lowStockDesc.setText(String.format("%d total products", productsData.size()));
+        creditSalesDesc.setText(String.format("%d credit transactions", stats.creditTransactions));
+
+        // Color coding for alerts
+        if (stats.lowStockItems > 0) {
+            lowStockLabel.setForeground(new Color(244, 67, 54));
+            lowStockLabel.setFont(new Font("Segoe UI", Font.BOLD, 28));
+        } else {
+            lowStockLabel.setForeground(new Color(96, 125, 139));
+            lowStockLabel.setFont(new Font("Segoe UI", Font.BOLD, 28));
+        }
+
+        if (stats.pendingReturns > 0) {
+            pendingReturnsLabel.setForeground(new Color(255, 152, 0));
+            pendingReturnsLabel.setFont(new Font("Segoe UI", Font.BOLD, 28));
+        } else {
+            pendingReturnsLabel.setForeground(new Color(96, 125, 139));
+            pendingReturnsLabel.setFont(new Font("Segoe UI", Font.BOLD, 28));
+        }
     }
 
-    private JPanel createStatCard(String title, JLabel valueLabel, String description, Color color) {
+    // ---------- Helper Classes ----------
+    private static class DashboardStats {
+        double totalSales = 0.0;
+        double todayRevenue = 0.0;
+        double creditSales = 0.0;
+        int newCustomers = 0;
+        int pendingReturns = 0;
+        int lowStockItems = 0;
+        int todaySalesCount = 0;
+        int creditTransactions = 0;
+    }
+
+    // ---------- Helper Methods (consistent with Reports) ----------
+    private JPanel createStatCard(String title, JLabel valueLabel, JLabel descriptionLabel, Color color) {
         JPanel card = new JPanel();
         card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
         card.setBackground(Color.WHITE);
@@ -297,20 +412,12 @@ public class DashboardHome extends JPanel {
 
         // Title
         JLabel titleLabel = new JLabel(title);
-        titleLabel.setFont(new Font("Segoe UI", Font.PLAIN, 14));
-        titleLabel.setForeground(new Color(100, 100, 100));
+        titleLabel.setFont(new Font("Segoe UI", Font.BOLD, 14));
+        titleLabel.setForeground(new Color(80, 80, 80));
         titleLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-        // Value
-        valueLabel.setFont(new Font("Segoe UI", Font.BOLD, 28));
-        valueLabel.setForeground(color);
-        valueLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-        // Description
-        JLabel descLabel = new JLabel(description);
-        descLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12));
-        descLabel.setForeground(new Color(150, 150, 150));
-        descLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+
 
         // Top border accent
         JPanel accent = new JPanel();
@@ -320,13 +427,97 @@ public class DashboardHome extends JPanel {
         accent.setAlignmentX(Component.LEFT_ALIGNMENT);
 
         card.add(accent);
-        card.add(Box.createRigidArea(new Dimension(0, 15)));
+        card.add(Box.createRigidArea(new Dimension(0, 10)));
+        card.add(Box.createRigidArea(new Dimension(0, 10)));
         card.add(titleLabel);
         card.add(Box.createRigidArea(new Dimension(0, 5)));
         card.add(valueLabel);
         card.add(Box.createRigidArea(new Dimension(0, 5)));
-        card.add(descLabel);
+        card.add(descriptionLabel);
 
         return card;
     }
+
+    private void showError(String message) {
+        SwingUtilities.invokeLater(() ->
+                JOptionPane.showMessageDialog(this, message, "Error", JOptionPane.ERROR_MESSAGE)
+        );
+    }
+
+    private void showMessage(String message) {
+        SwingUtilities.invokeLater(() ->
+                JOptionPane.showMessageDialog(this, message, "Info", JOptionPane.INFORMATION_MESSAGE)
+        );
+    }
+
+    // ---------- Safe Data Extraction Methods (consistent with Reports) ----------
+    private Double safeDouble(Object o) {
+        return safeDouble(o, 0.0);
+    }
+
+    private Double safeDouble(Object o, Double defaultValue) {
+        if (o == null) return defaultValue;
+        if (o instanceof Number) return ((Number) o).doubleValue();
+        try {
+            return Double.parseDouble(o.toString());
+        } catch (Exception e) {
+            return defaultValue;
+        }
+    }
+
+    private Integer safeInteger(Object o) {
+        return safeInteger(o, 0);
+    }
+
+    private Integer safeInteger(Object o, Integer defaultValue) {
+        if (o == null) return defaultValue;
+        if (o instanceof Number) return ((Number) o).intValue();
+        try {
+            return Integer.parseInt(o.toString());
+        } catch (Exception e) {
+            return defaultValue;
+        }
+    }
+
+    private String safeString(Object o) {
+        if (o == null) return "";
+        return o.toString();
+    }
+
+    /**
+     * Loads a single-day report from the Reports API and returns the map.
+     * Supports both direct object response and wrapped { "data": { ... } } responses.
+     */
+    private Map<String, Object> loadDailyReport(String date) throws Exception {
+        String resp = client.get("/api/secure/reports/daily?date=" + date);
+        if (resp == null || resp.trim().isEmpty()) return Collections.emptyMap();
+
+        try {
+            // Try parse as direct Map
+            Map<String, Object> parsed = mapper.readValue(resp, new TypeReference<Map<String, Object>>() {});
+            if (parsed == null) return Collections.emptyMap();
+
+            // If wrapped in { "data": { ... } }
+            Object data = parsed.get("data");
+            if (data instanceof Map) {
+                return (Map<String, Object>) data;
+            }
+
+            // Otherwise assume parsed itself is the report
+            return parsed;
+        } catch (Exception ex) {
+            // fallback: try to use client's parsing helper if available (keeps parity with Reports panel)
+            try {
+                Map<String, Object> alt = client.parseResponse(resp);
+                if (alt != null && alt.containsKey("data") && alt.get("data") instanceof Map) {
+                    return (Map<String, Object>) alt.get("data");
+                }
+                if (alt != null) return alt;
+            } catch (Exception e) {
+                // give up
+            }
+            throw ex;
+        }
+    }
+
 }
