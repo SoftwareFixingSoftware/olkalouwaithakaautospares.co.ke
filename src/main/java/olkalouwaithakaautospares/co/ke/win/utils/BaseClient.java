@@ -7,7 +7,6 @@ import javax.swing.JOptionPane;
 import java.net.CookieManager;
 import java.net.CookiePolicy;
 import java.net.CookieStore;
-import java.net.HttpCookie;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -16,7 +15,6 @@ import java.time.Duration;
 import java.util.Map;
 import java.util.List;
 import java.util.HashMap;
-import java.util.ArrayList;
 
 public class BaseClient {
     private static BaseClient instance;
@@ -275,52 +273,5 @@ public class BaseClient {
         }
     }
 
-    // Utility method to build query parameters
-    public String buildQueryString(Map<String, String> params) {
-        if (params == null || params.isEmpty()) {
-            return "";
-        }
 
-        StringBuilder sb = new StringBuilder("?");
-        for (Map.Entry<String, String> entry : params.entrySet()) {
-            if (sb.length() > 1) {
-                sb.append("&");
-            }
-            sb.append(entry.getKey()).append("=").append(entry.getValue());
-        }
-        return sb.toString();
-    }
-
-    // GET with query parameters
-    public String getWithParams(String endpoint, Map<String, String> params) throws Exception {
-        String queryString = buildQueryString(params);
-        return get(endpoint + queryString);
-    }
-
-    // Helper method for making requests with timeout
-    public String requestWithTimeout(String method, String endpoint, Object body, int seconds) throws Exception {
-        String url = baseUrl + endpoint;
-
-        HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
-                .uri(URI.create(url))
-                .header("Content-Type", "application/json")
-                .timeout(Duration.ofSeconds(seconds));
-
-        if (body != null) {
-            String json = mapper.writeValueAsString(body);
-            requestBuilder.method(method, HttpRequest.BodyPublishers.ofString(json));
-        } else {
-            requestBuilder.method(method, HttpRequest.BodyPublishers.noBody());
-        }
-
-        HttpRequest request = requestBuilder.build();
-
-        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-
-        if (response.statusCode() >= 400) {
-            throw new Exception("HTTP " + response.statusCode() + ": " + response.body());
-        }
-
-        return response.body();
-    }
 }

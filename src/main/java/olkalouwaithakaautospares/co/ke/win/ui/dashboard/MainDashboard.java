@@ -1,6 +1,13 @@
 package olkalouwaithakaautospares.co.ke.win.ui.dashboard;
 
 import olkalouwaithakaautospares.co.ke.win.ui.auth.AuthPanel;
+import olkalouwaithakaautospares.co.ke.win.ui.dashboard.customer.CustomerPanel;
+import olkalouwaithakaautospares.co.ke.win.ui.dashboard.home.DashboardHome;
+import olkalouwaithakaautospares.co.ke.win.ui.dashboard.master.InventoryPanel;
+import olkalouwaithakaautospares.co.ke.win.ui.dashboard.reports.ReportingPanel;
+import olkalouwaithakaautospares.co.ke.win.ui.dashboard.returns.ReturnApprovalPanel;
+import olkalouwaithakaautospares.co.ke.win.ui.dashboard.returns.ReturnPanel;
+import olkalouwaithakaautospares.co.ke.win.ui.dashboard.sales.SalesPanel;
 import olkalouwaithakaautospares.co.ke.win.utils.BaseClient;
 import olkalouwaithakaautospares.co.ke.win.utils.UserSessionManager;
 import javax.swing.*;
@@ -46,10 +53,11 @@ public class MainDashboard extends JFrame {
         // Add panels to content area
         contentPanel.add(new DashboardHome(), "HOME");
         contentPanel.add(new SalesPanel(), "SALES");
-        //contentPanel.add(new CustomerPanel(), "CUSTOMERS");
-       // contentPanel.add(new InventoryPanel(), "INVENTORY");
-      //  contentPanel.add(new ReturnsPanel(), "RETURNS");
-       // contentPanel.add(new ReportsPanel(), "REPORTS");
+        contentPanel.add(new CustomerPanel(), "CUSTOMERS");
+        contentPanel.add(new InventoryPanel(), "INVENTORY");
+         contentPanel.add(new ReturnPanel(), "RETURNS");
+        contentPanel.add(new ReturnApprovalPanel(), "RETURNS-APPROVAL");
+        contentPanel.add(new ReportingPanel(), "REPORTS");
       //  contentPanel.add(new SettingsPanel(), "SETTINGS");
 
         add(contentPanel, BorderLayout.CENTER);
@@ -94,9 +102,9 @@ public class MainDashboard extends JFrame {
 
         if (isAdmin) {
             navItems = new String[]{"Dashboard", "Sales", "Customers", "Inventory",
-                    "Returns", "Reports", "Settings", "Logout"};
+                    "Returns", "Reports","Returns-approval", "Settings", "Logout"};
             panelNames = new String[]{"HOME", "SALES", "CUSTOMERS", "INVENTORY",
-                    "RETURNS", "REPORTS", "SETTINGS", "LOGOUT"};
+                    "RETURNS", "REPORTS","RETURNS-APPROVAL", "SETTINGS", "LOGOUT"};
         } else {
             // Cashier only sees Sales, Customers, Returns
             navItems = new String[]{"Dashboard", "Sales", "Customers", "Returns", "Logout"};

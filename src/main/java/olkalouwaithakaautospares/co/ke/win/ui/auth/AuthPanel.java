@@ -1,8 +1,8 @@
 package olkalouwaithakaautospares.co.ke.win.ui.auth;
 
+import olkalouwaithakaautospares.co.ke.win.ui.dashboard.MainDashboard;
 import olkalouwaithakaautospares.co.ke.win.utils.BaseClient;
 import olkalouwaithakaautospares.co.ke.win.utils.UserSessionManager;
-import olkalouwaithakaautospares.co.ke.win.ui.dashboard.MainDashboard;
 
 import javax.imageio.ImageIO;
 import javax.swing.*;
@@ -637,6 +637,7 @@ public class AuthPanel extends JPanel {
                         // Open dashboard
                         SwingUtilities.invokeLater(() -> {
                             try {
+
                                 MainDashboard dashboard = new MainDashboard();
                                 dashboard.setVisible(true);
 

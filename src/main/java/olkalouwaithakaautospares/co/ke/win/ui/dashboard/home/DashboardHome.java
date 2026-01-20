@@ -1,13 +1,11 @@
-package olkalouwaithakaautospares.co.ke.win.ui.dashboard;
+package olkalouwaithakaautospares.co.ke.win.ui.dashboard.home;
 
 import olkalouwaithakaautospares.co.ke.win.utils.BaseClient;
-import olkalouwaithakaautospares.co.ke.win.utils.UserSessionManager;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import javax.swing.*;
 import java.awt.*;
 import java.time.LocalDate;
 import java.util.Map;
-import java.util.List;
 
 public class DashboardHome extends JPanel {
     private BaseClient client;

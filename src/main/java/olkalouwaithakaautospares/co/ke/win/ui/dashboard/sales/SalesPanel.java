@@ -1,4 +1,4 @@
-package olkalouwaithakaautospares.co.ke.win.ui.dashboard;
+package olkalouwaithakaautospares.co.ke.win.ui.dashboard.sales;
 
 import olkalouwaithakaautospares.co.ke.win.utils.BaseClient;
 import olkalouwaithakaautospares.co.ke.win.utils.UserSessionManager;
