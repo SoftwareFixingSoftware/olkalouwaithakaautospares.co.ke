@@ -641,9 +641,6 @@ public class AuthPanel extends JPanel {
                                 MainDashboard dashboard = new MainDashboard();
                                 dashboard.setVisible(true);
 
-                                // Log successful login
-                                System.out.println("User logged in successfully: " + name + ", Role: " + roleName);
-
                             } catch (Exception ex) {
                                 ex.printStackTrace();
                                 showToast("Failed to initialize dashboard: " + ex.getMessage(), true);
@@ -917,8 +914,7 @@ public class AuthPanel extends JPanel {
         JWindow toast = new JWindow();
         toast.setLayout(new BorderLayout());
         JLabel label = new JLabel(msg, SwingConstants.CENTER);
-        System.out.println(msg);
-        label.setBorder(new EmptyBorder(12, 20, 12, 20));
+         label.setBorder(new EmptyBorder(12, 20, 12, 20));
         label.setOpaque(true);
         label.setBackground(error ? new Color(220,80,80) : new Color(12,97,103));
         label.setForeground(Color.WHITE);

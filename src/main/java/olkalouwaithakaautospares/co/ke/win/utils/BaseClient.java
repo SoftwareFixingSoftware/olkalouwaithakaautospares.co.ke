@@ -15,6 +15,7 @@ import java.time.Duration;
 import java.util.Map;
 import java.util.List;
 import java.util.HashMap;
+import java.util.ArrayList;
 
 public class BaseClient {
     private static BaseClient instance;
@@ -45,7 +46,7 @@ public class BaseClient {
         return instance;
     }
 
-    // ADD THIS METHOD - Getter for ObjectMapper
+    // Getter for ObjectMapper
     public ObjectMapper getMapper() {
         return mapper;
     }
@@ -173,34 +174,81 @@ public class BaseClient {
         }
     }
 
-    // Parse response to List with better error handling
+    // Parse response to List with robust handling:
+    // - Accepts a JSON array: [ {...}, {...} ]
+    // - Accepts a wrapped response { "data": [ ... ] }
+    // - Accepts a wrapped response where data is a single object { "data": { ... } } -> wraps it into a List
+    // - Accepts a single object top-level { ... } -> wraps it into a List
     public List<Map<String, Object>> parseResponseList(String jsonResponse) throws Exception {
         if (jsonResponse == null || jsonResponse.trim().isEmpty()) {
             throw new Exception("Empty response received");
         }
         try {
-            // First try to parse as a list
+            // Try parsing directly as a JSON array first
             return mapper.readValue(jsonResponse, new TypeReference<List<Map<String, Object>>>() {});
         } catch (Exception e1) {
             try {
-                // If it's not a list, it might be a wrapped response with data field
-                Map<String, Object> response = parseResponse(jsonResponse);
-                if (response.containsKey("data") && response.get("data") instanceof List) {
-                    @SuppressWarnings("unchecked")
-                    List<Map<String, Object>> data = (List<Map<String, Object>>) response.get("data");
-                    return data;
+                // Try as a wrapped object: { "data": ... }
+                Map<String, Object> responseMap = null;
+                try {
+                    responseMap = parseResponse(jsonResponse);
+                } catch (Exception ex) {
+                    // parseResponse failed - maybe top-level is not an object, continue to fallback
                 }
-                throw new Exception("Response is not a list: " + jsonResponse);
+
+                if (responseMap != null && responseMap.containsKey("data")) {
+                    Object data = responseMap.get("data");
+                    if (data instanceof List) {
+                        @SuppressWarnings("unchecked")
+                        List<Map<String, Object>> list = (List<Map<String, Object>>) data;
+                        return list;
+                    } else if (data instanceof Map) {
+                        @SuppressWarnings("unchecked")
+                        Map<String, Object> single = (Map<String, Object>) data;
+                        List<Map<String, Object>> wrapped = new ArrayList<>();
+                        wrapped.add(single);
+                        return wrapped;
+                    } else if (data == null) {
+                        return new ArrayList<>(); // empty list if data is null
+                    }
+                }
+
+                // As a last resort: maybe the top-level is a single object that directly represents the item.
+                if (responseMap != null) {
+                    // Wrap the top-level object as a list (useful when server returns { id:..., name:... })
+                    List<Map<String, Object>> wrapped = new ArrayList<>();
+                    wrapped.add(responseMap);
+                    return wrapped;
+                }
+
+                // Nothing matched: rethrow with helpful message
+                throw new Exception("Response is not a list or wrapped list: " + jsonResponse);
             } catch (Exception e2) {
-                throw new Exception("Failed to parse as list: " + e1.getMessage() + " | " + e2.getMessage());
+                throw new Exception("Failed to parse as list: " + e1.getMessage() + " | " + e2.getMessage(), e2);
             }
         }
     }
 
     // Get response data object
     public Object getResponseData(String jsonResponse) throws Exception {
-        Map<String, Object> response = parseResponse(jsonResponse);
-        return response.get("data");
+        // Prefer extracting "data" from a parsed object, but also handle top-level arrays/objects
+        try {
+            Map<String, Object> response = parseResponse(jsonResponse);
+            if (response.containsKey("data")) {
+                return response.get("data");
+            } else {
+                // No data field: return the parsed object itself
+                return response;
+            }
+        } catch (Exception e) {
+            // parseResponse failed: maybe the response is a top-level list
+            try {
+                List<Map<String, Object>> list = mapper.readValue(jsonResponse, new TypeReference<List<Map<String, Object>>>() {});
+                return list;
+            } catch (Exception ex) {
+                throw new Exception("Failed to extract data: " + e.getMessage() + " | " + ex.getMessage(), ex);
+            }
+        }
     }
 
     // Check if response is successful
@@ -217,14 +265,10 @@ public class BaseClient {
         return message != null ? message.toString() : "";
     }
 
-    // Get response data as list
+    // Get response data as list (now consistent)
     @SuppressWarnings("unchecked")
     public List<Map<String, Object>> getResponseDataAsList(String jsonResponse) throws Exception {
-        Object data = getResponseData(jsonResponse);
-        if (data instanceof List) {
-            return (List<Map<String, Object>>) data;
-        }
-        throw new Exception("Response data is not a list");
+        return parseResponseList(jsonResponse);
     }
 
     // Handle session expired
@@ -272,6 +316,4 @@ public class BaseClient {
             return false;
         }
     }
-
-
 }

@@ -1212,7 +1212,7 @@ public class ReportingPanel extends JPanel {
             @Override
             protected Void doInBackground() {
                 try {
-                    String resp = client.get("/api/secure/users");
+                    String resp = client.get("/api/auth/me");
                     if (resp != null && !resp.trim().isEmpty()) {
                         List<Map<String, Object>> users = client.parseResponseList(resp);
                         for (Map<String, Object> user : users) {
