@@ -477,8 +477,16 @@ public class ReturnPanel extends JPanel {
                     return;
                 }
 
+                // Filter out sales that are in PENDING status
                 recentSales.clear();
-                recentSales.addAll(sales);
+                if (sales != null && !sales.isEmpty()) {
+                    for (Map<String, Object> sale : sales) {
+                        if (!isSalePending(sale)) {
+                            recentSales.add(sale);
+                        }
+                    }
+                }
+
                 updateSalesTable();
 
                 // Clear selections
@@ -1139,8 +1147,18 @@ public class ReturnPanel extends JPanel {
                     // Refresh sale items (quantity might have changed)
                     loadSaleItems(selectedSaleId);
                 } else {
+                    // Show custom dialog for quantity error
+                    String message = "<html><b>Cannot Return More Than Purchased Quantity</b><br><br>"
+                            + "Possible reasons:<br>"
+                            + "• Item may have been returned already<br>"
+                            + "• You entered a quantity higher than what was sold<br>"
+                            + "• Check return history for previous returns<br><br>"
+                            + "<b>Action:</b> Enter the exact quantity available for return as shown in the sale details.</html>";
+
                     JOptionPane.showMessageDialog(ReturnPanel.this,
-                            message, "Error Creating Return", JOptionPane.ERROR_MESSAGE);
+                            message,
+                            "Return Validation Error",
+                            JOptionPane.ERROR_MESSAGE);
                 }
             }
         };
@@ -1367,4 +1385,31 @@ public class ReturnPanel extends JPanel {
             return this;
         }
     }
+
+    /**
+     * Returns true if the sale (or nested data) has any of the common status keys set to "PENDING".
+     */
+    private boolean isSalePending(Map<String, Object> sale) {
+        if (sale == null) return false;
+
+        // Check common status keys on the root object
+        String[] keys = {"status", "paymentStatus", "saleStatus"};
+        for (String key : keys) {
+            String v = Objects.toString(sale.get(key), "");
+            if ("PENDING".equalsIgnoreCase(v)) return true;
+        }
+
+        // If payload has a nested "data" object, check there too
+        Object data = sale.get("data");
+        if (data instanceof Map) {
+            Map<?, ?> dm = (Map<?, ?>) data;
+            for (String key : keys) {
+                String v = Objects.toString(dm.get(key), "");
+                if ("PENDING".equalsIgnoreCase(v)) return true;
+            }
+        }
+
+        return false;
+    }
+
 }

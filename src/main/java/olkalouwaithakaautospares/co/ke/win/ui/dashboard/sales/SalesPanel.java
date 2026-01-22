@@ -5,11 +5,14 @@ import olkalouwaithakaautospares.co.ke.win.utils.UserSessionManager;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import javax.swing.*;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
 import javax.swing.event.ListSelectionEvent;
 import javax.swing.event.ListSelectionListener;
 import javax.swing.event.TableModelEvent;
 import javax.swing.event.TableModelListener;
 import javax.swing.table.DefaultTableModel;
+import javax.swing.table.TableRowSorter;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
@@ -23,7 +26,8 @@ import java.util.List;
  * Left: product grid (unchanged)
  * Right: tabbed pane with:
  *   - "Cart" (point-of-sale)
- *   - "Sales" (recent sales table + payments view + record-payment action)
+ *   - "Paid Sales" (completed sales - no modifications allowed)
+ *   - "Credit Sales" (credit sales with payment update functionality)
  */
 @SuppressWarnings("unchecked")
 public class SalesPanel extends JPanel {
@@ -33,8 +37,9 @@ public class SalesPanel extends JPanel {
 
     private final List<Map<String, Object>> products = new ArrayList<>();
     private final List<CartItem> cartItems = new ArrayList<>();
-    private final List<Map<String, Object>> recentSales = new ArrayList<>(); // local cache (server-authoritative)
-    private final List<Map<String, Object>> recentPayments = new ArrayList<>(); // cache for payments of selected sale
+    private final List<Map<String, Object>> paidSales = new ArrayList<>();
+    private final List<Map<String, Object>> creditSales = new ArrayList<>();
+    private final List<Map<String, Object>> recentPayments = new ArrayList<>();
 
     // POS components
     private JTable cartTable;
@@ -44,12 +49,30 @@ public class SalesPanel extends JPanel {
     private JPanel productGrid;
     private JTextField searchField;
 
-    // Sales/Payments components
-    private JTable salesTable;
-    private DefaultTableModel salesModel;
-    private JTable paymentsTable;
-    private DefaultTableModel paymentsModel;
-    private JLabel selectedSaleLabel;
+    // New customer / receipt components
+    private JCheckBox sendReceiptCheckbox;
+    private JTextField emailField;
+    private JButton checkoutBtn;
+
+    // Tabs
+    private JTabbedPane rightTabs;
+    private JPanel paidSalesPanel;
+    private JPanel creditSalesPanel;
+
+    // Paid Sales components
+    private JTable paidSalesTable;
+    private DefaultTableModel paidSalesModel;
+    private TableRowSorter<DefaultTableModel> paidSalesSorter;
+    private JTextField paidSalesSearchField;
+
+    // Credit Sales components
+    private JTable creditSalesTable;
+    private DefaultTableModel creditSalesModel;
+    private TableRowSorter<DefaultTableModel> creditSalesSorter;
+    private JTextField creditSalesSearchField;
+    private JLabel selectedCreditSaleLabel;
+    private JTable creditPaymentsTable;
+    private DefaultTableModel creditPaymentsModel;
 
     // Date formatter
     private final DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
@@ -59,13 +82,15 @@ public class SalesPanel extends JPanel {
         Integer productId;
         String productName;
         Double unitPrice;
+        Double originalPrice; // Minimum selling price
         Integer quantity;
         Double total;
 
-        CartItem(Integer productId, String productName, Double unitPrice, Integer quantity) {
+        CartItem(Integer productId, String productName, Double unitPrice, Double originalPrice, Integer quantity) {
             this.productId = productId;
             this.productName = productName;
             this.unitPrice = unitPrice;
+            this.originalPrice = originalPrice; // Store minimum selling price
             this.quantity = quantity;
             this.total = round(unitPrice * quantity);
         }
@@ -77,7 +102,7 @@ public class SalesPanel extends JPanel {
         this.session = UserSessionManager.getInstance();
         initUI();
         loadProducts();
-        loadRecentSales(); // load authoritative sales from DB on start
+        loadRecentSales();
     }
 
     // ---------- UI Initialization ----------
@@ -92,13 +117,15 @@ public class SalesPanel extends JPanel {
         // Left product panel
         JPanel productPanel = createProductPanel();
 
-        // Right: tabbed pane containing Cart + Sales history
-        JTabbedPane rightTabs = new JTabbedPane();
+        // Right: tabbed pane containing Cart + Paid Sales + Credit Sales
+        rightTabs = new JTabbedPane();
         JPanel cartPanel = createCartPanel();
-        JPanel salesHistoryPanel = createSalesHistoryPanel();
+        paidSalesPanel = createPaidSalesPanel();
+        creditSalesPanel = createCreditSalesPanel();
 
         rightTabs.addTab("Cart", cartPanel);
-        rightTabs.addTab("Sales", salesHistoryPanel);
+        rightTabs.addTab("Paid Sales", paidSalesPanel);
+        rightTabs.addTab("Credit Sales", creditSalesPanel);
 
         JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, productPanel, rightTabs);
         splitPane.setDividerLocation(600);
@@ -161,6 +188,7 @@ public class SalesPanel extends JPanel {
         // Search
         JPanel searchPanel = new JPanel(new BorderLayout(8, 0));
         searchPanel.setOpaque(false);
+        searchPanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 10)); // Limit height
         searchField = new JTextField();
         searchField.setFont(new Font("Segoe UI", Font.PLAIN, 14));
         searchField.setBorder(BorderFactory.createCompoundBorder(
@@ -168,6 +196,24 @@ public class SalesPanel extends JPanel {
                 BorderFactory.createEmptyBorder(8, 12, 8, 12)
         ));
         searchField.putClientProperty("JTextField.placeholderText", "Search products by name or SKU...");
+
+        // Add DocumentListener for real-time search
+        searchField.getDocument().addDocumentListener(new DocumentListener() {
+            @Override
+            public void insertUpdate(DocumentEvent e) {
+                searchProducts(searchField.getText());
+            }
+
+            @Override
+            public void removeUpdate(DocumentEvent e) {
+                searchProducts(searchField.getText());
+            }
+
+            @Override
+            public void changedUpdate(DocumentEvent e) {
+                searchProducts(searchField.getText());
+            }
+        });
 
         JButton searchBtn = new JButton("Search");
         styleButton(searchBtn, new Color(33, 150, 243));
@@ -189,9 +235,24 @@ public class SalesPanel extends JPanel {
         return panel;
     }
 
-    private JButton createProductButton(String name, double price, Integer productId) {
-        JButton button = new JButton("<html><center><b>" + name + "</b><br/>₦ " +
-                String.format("%,.2f", price) + "</center></html>");
+    private JButton createProductButton(
+            String name,
+            String description,
+            double price,
+            Integer productId
+    ) {
+        String safeDescription = (description == null || description.isBlank())
+                ? ""
+                : "<span style='font-size:10px;color:#777;'>" + description + "</span><br/>";
+
+        JButton button = new JButton(
+                "<html><center>"
+                        + "<b>" + name + "</b><br/>"
+                        + safeDescription
+                        + "₦ " + String.format("%,.2f", price)
+                        + "</center></html>"
+        );
+
         button.putClientProperty("productId", productId);
         button.setFont(new Font("Segoe UI", Font.PLAIN, 12));
         button.setBackground(Color.WHITE);
@@ -204,46 +265,57 @@ public class SalesPanel extends JPanel {
 
         button.addActionListener(e -> {
             Integer id = (Integer) button.getClientProperty("productId");
-            addToCart(id, name, price);
-        });
 
-        button.addMouseListener(new java.awt.event.MouseAdapter() {
-            public void mouseEntered(java.awt.event.MouseEvent evt) {
-                button.setBackground(new Color(245, 247, 250));
+            Double minPrice = price;
+            for (Map<String, Object> product : products) {
+                Integer prodId = getIntegerValue(product, "id", 0);
+                if (prodId.equals(id)) {
+                    minPrice = getDoubleValue(product, "minimumSellingPrice", price);
+                    break;
+                }
             }
 
-            public void mouseExited(java.awt.event.MouseEvent evt) {
-                button.setBackground(Color.WHITE);
-            }
+            addToCart(id, name, price, minPrice);
+            rightTabs.setSelectedIndex(0);
         });
 
         return button;
     }
 
+
     private void searchProducts(String query) {
         if (query == null || query.trim().isEmpty()) {
-            loadProducts();
-            return;
-        }
-        List<Map<String, Object>> filtered = new ArrayList<>();
-        String lowerQuery = query.toLowerCase();
-        for (Map<String, Object> product : products) {
-            String name = getStringValue(product, "name", "").toLowerCase();
-            String sku = getStringValue(product, "sku", "").toLowerCase();
-            if (name.contains(lowerQuery) || sku.contains(lowerQuery)) filtered.add(product);
-        }
-        productGrid.removeAll();
-        if (filtered.isEmpty()) {
-            JLabel noResultsLabel = new JLabel("No products found for: " + query, SwingConstants.CENTER);
-            noResultsLabel.setFont(new Font("Segoe UI", Font.PLAIN, 14));
-            noResultsLabel.setForeground(new Color(150, 150, 150));
-            productGrid.add(noResultsLabel);
-        } else {
-            for (Map<String, Object> product : filtered) {
+            // Show all products
+            productGrid.removeAll();
+            for (Map<String, Object> product : products) {
                 String name = getStringValue(product, "name", "Unknown Product");
                 Double price = getDoubleValue(product, "minimumSellingPrice", 0.0);
                 Integer productId = getIntegerValue(product, "id", 0);
-                productGrid.add(createProductButton(name, price, productId));
+                String description = getStringValue(product,"description","no description");
+                productGrid.add(createProductButton(name,description, price, productId));
+            }
+        } else {
+            List<Map<String, Object>> filtered = new ArrayList<>();
+            String lowerQuery = query.toLowerCase();
+            for (Map<String, Object> product : products) {
+                String name = getStringValue(product, "name", "").toLowerCase();
+                String sku = getStringValue(product, "sku", "").toLowerCase();
+                if (name.contains(lowerQuery) || sku.contains(lowerQuery)) filtered.add(product);
+            }
+            productGrid.removeAll();
+            if (filtered.isEmpty()) {
+                JLabel noResultsLabel = new JLabel("No products found for: " + query, SwingConstants.CENTER);
+                noResultsLabel.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+                noResultsLabel.setForeground(new Color(150, 150, 150));
+                productGrid.add(noResultsLabel);
+            } else {
+                for (Map<String, Object> product : filtered) {
+                    String name = getStringValue(product, "name", "Unknown Product");
+                    Double price = getDoubleValue(product, "minimumSellingPrice", 0.0);
+                    Integer productId = getIntegerValue(product, "id", 0);
+                    String description = getStringValue(product,"description","no description");
+                    productGrid.add(createProductButton(name, description, price, productId));
+                }
             }
         }
         productGrid.revalidate();
@@ -267,11 +339,12 @@ public class SalesPanel extends JPanel {
         cartModel = new DefaultTableModel(columns, 0) {
             @Override
             public boolean isCellEditable(int row, int column) {
-                return column == 2 || column == 4;
+                return column == 1 || column == 2 || column == 4; // Price, Qty, Remove
             }
 
             @Override
             public Class<?> getColumnClass(int columnIndex) {
+                if (columnIndex == 1 || columnIndex == 3) return Double.class;
                 if (columnIndex == 2) return Integer.class;
                 return String.class;
             }
@@ -284,25 +357,115 @@ public class SalesPanel extends JPanel {
         cartTable.getColumnModel().getColumn(4).setCellRenderer(new ButtonRenderer());
         cartTable.getColumnModel().getColumn(4).setCellEditor(new ButtonEditor(new JCheckBox()));
 
+        // Custom cell editor for price column with validation
+        cartTable.getColumnModel().getColumn(1).setCellEditor(new DefaultCellEditor(new JTextField()) {
+            @Override
+            public boolean stopCellEditing() {
+                try {
+                    String value = ((JTextField) getComponent()).getText();
+                    // Remove currency symbol and commas
+                    value = value.replace("₦", "").replace(",", "").trim();
+                    Double price = Double.parseDouble(value);
+
+                    int row = cartTable.getEditingRow();
+                    if (row >= 0 && row < cartItems.size()) {
+                        CartItem item = cartItems.get(row);
+                        if (price < item.originalPrice) {
+                            JOptionPane.showMessageDialog(cartTable,
+                                    "Price cannot be less than minimum: ₦ " + String.format("%,.2f", item.originalPrice),
+                                    "Invalid Price", JOptionPane.ERROR_MESSAGE);
+                            return false;
+                        }
+                    }
+                } catch (NumberFormatException e) {
+                    JOptionPane.showMessageDialog(cartTable, "Invalid price format", "Error", JOptionPane.ERROR_MESSAGE);
+                    return false;
+                }
+                return super.stopCellEditing();
+            }
+        });
+
+        // Custom cell editor for quantity column
+        cartTable.getColumnModel().getColumn(2).setCellEditor(new DefaultCellEditor(new JTextField()) {
+            @Override
+            public boolean stopCellEditing() {
+                try {
+                    String value = ((JTextField) getComponent()).getText();
+                    int qty = Integer.parseInt(value.trim());
+                    if (qty < 1) {
+                        JOptionPane.showMessageDialog(cartTable, "Quantity must be at least 1", "Error", JOptionPane.ERROR_MESSAGE);
+                        return false;
+                    }
+                } catch (NumberFormatException e) {
+                    JOptionPane.showMessageDialog(cartTable, "Invalid quantity", "Error", JOptionPane.ERROR_MESSAGE);
+                    return false;
+                }
+                return super.stopCellEditing();
+            }
+        });
+
         cartModel.addTableModelListener(new TableModelListener() {
             @Override
             public void tableChanged(TableModelEvent e) {
                 if (e.getType() == TableModelEvent.UPDATE) {
                     int row = e.getFirstRow();
                     int col = e.getColumn();
-                    if (col == 2 && row >= 0 && row < cartItems.size()) {
-                        Object val = cartModel.getValueAt(row, 2);
-                        int qty = 1;
-                        try {
-                            if (val instanceof Number) qty = ((Number) val).intValue();
-                            else qty = Integer.parseInt(val.toString());
-                        } catch (Exception ex) { qty = 1; }
-                        if (qty < 1) qty = 1;
+
+                    if (row >= 0 && row < cartItems.size()) {
                         CartItem item = cartItems.get(row);
-                        item.quantity = qty;
-                        item.total = round(item.unitPrice * item.quantity);
-                        cartModel.setValueAt(String.format("₦ %,.2f", item.total), row, 3);
-                        calculateTotal();
+
+                        if (col == 1) { // Price column
+                            Object val = cartModel.getValueAt(row, 1);
+                            if (val instanceof Double) {
+                                double newPrice = (Double) val;
+                                if (newPrice < item.originalPrice) {
+                                    JOptionPane.showMessageDialog(SalesPanel.this,
+                                            "Price cannot be less than minimum: ₦ " + String.format("%,.2f", item.originalPrice),
+                                            "Invalid Price", JOptionPane.ERROR_MESSAGE);
+                                    // Revert to original price
+                                    cartModel.setValueAt(item.unitPrice, row, 1);
+                                } else {
+                                    item.unitPrice = newPrice;
+                                    item.total = round(item.unitPrice * item.quantity);
+                                    cartModel.setValueAt(String.format("₦ %,.2f", item.total), row, 3);
+                                    calculateTotal();
+                                }
+                            } else if (val instanceof String) {
+                                // Handle string input (e.g., user types "1200" instead of 1200.0)
+                                try {
+                                    String strVal = ((String) val).replace("₦", "").replace(",", "").trim();
+                                    double newPrice = Double.parseDouble(strVal);
+                                    if (newPrice < item.originalPrice) {
+                                        JOptionPane.showMessageDialog(SalesPanel.this,
+                                                "Price cannot be less than minimum: ₦ " + String.format("%,.2f", item.originalPrice),
+                                                "Invalid Price", JOptionPane.ERROR_MESSAGE);
+                                        cartModel.setValueAt(item.unitPrice, row, 1);
+                                    } else {
+                                        item.unitPrice = newPrice;
+                                        item.total = round(item.unitPrice * item.quantity);
+                                        cartModel.setValueAt(String.format("₦ %,.2f", item.total), row, 3);
+                                        calculateTotal();
+                                    }
+                                } catch (NumberFormatException ex) {
+                                    // If invalid, revert to original price
+                                    cartModel.setValueAt(item.unitPrice, row, 1);
+                                }
+                            }
+                        } else if (col == 2) { // Quantity column
+                            Object val = cartModel.getValueAt(row, 2);
+                            int qty = 1;
+                            try {
+                                if (val instanceof Number) qty = ((Number) val).intValue();
+                                else qty = Integer.parseInt(val.toString());
+                            } catch (Exception ex) {
+                                qty = item.quantity; // Keep current quantity if invalid
+                            }
+                            if (qty < 1) qty = 1;
+                            item.quantity = qty;
+                            item.total = round(item.unitPrice * item.quantity);
+                            cartModel.setValueAt(String.format("₦ %,.2f", item.total), row, 3);
+                            calculateTotal();
+                        }
                     }
                 }
             }
@@ -318,7 +481,7 @@ public class SalesPanel extends JPanel {
         bottomArea.setBackground(new Color(250, 250, 250));
         bottomArea.setBorder(BorderFactory.createEmptyBorder(10, 0, 0, 0));
 
-        JPanel customerPanel = new JPanel(new GridLayout(3, 2, 8, 8));
+        JPanel customerPanel = new JPanel(new GridLayout(5, 2, 8, 8));
         customerPanel.setBorder(BorderFactory.createTitledBorder("Customer Information"));
         customerPanel.setBackground(new Color(250, 250, 250));
 
@@ -330,12 +493,30 @@ public class SalesPanel extends JPanel {
 
         paymentMethodCombo = new JComboBox<>(new String[]{"CASH", "CREDIT"});
 
+        sendReceiptCheckbox = new JCheckBox("Send receipt via email");
+        emailField = new JTextField();
+        emailField.putClientProperty("JTextField.placeholderText", "Email address for receipt");
+        emailField.setVisible(false);
+
+        sendReceiptCheckbox.addActionListener(e -> {
+            boolean sel = sendReceiptCheckbox.isSelected();
+            emailField.setVisible(sel);
+            SwingUtilities.invokeLater(() -> {
+                customerPanel.revalidate();
+                customerPanel.repaint();
+            });
+        });
+
         customerPanel.add(new JLabel("Phone:"));
         customerPanel.add(phoneField);
         customerPanel.add(new JLabel("Name:"));
         customerPanel.add(nameField);
         customerPanel.add(new JLabel("Payment:"));
         customerPanel.add(paymentMethodCombo);
+        customerPanel.add(sendReceiptCheckbox);
+        customerPanel.add(new JLabel(""));
+        customerPanel.add(new JLabel("Email (if sending):"));
+        customerPanel.add(emailField);
 
         JPanel checkoutPanel = new JPanel(new BorderLayout());
         checkoutPanel.setBorder(BorderFactory.createEmptyBorder(12, 0, 0, 0));
@@ -344,13 +525,17 @@ public class SalesPanel extends JPanel {
         totalLabel = new JLabel("Total: ₦ 0.00", SwingConstants.RIGHT);
         totalLabel.setFont(new Font("Segoe UI", Font.BOLD, 18));
 
-        JButton checkoutBtn = new JButton("Process Sale");
+        checkoutBtn = new JButton("Process Sale");
         styleButton(checkoutBtn, new Color(76, 175, 80));
-        checkoutBtn.addActionListener(e -> processSale(
-                phoneField.getText(),
-                nameField.getText(),
-                (String) paymentMethodCombo.getSelectedItem()
-        ));
+        checkoutBtn.addActionListener(e -> {
+            processSale(
+                    phoneField.getText(),
+                    nameField.getText(),
+                    (String) paymentMethodCombo.getSelectedItem(),
+                    sendReceiptCheckbox.isSelected(),
+                    emailField.getText()
+            );
+        });
 
         checkoutPanel.add(totalLabel, BorderLayout.CENTER);
         checkoutPanel.add(checkoutBtn, BorderLayout.EAST);
@@ -366,8 +551,8 @@ public class SalesPanel extends JPanel {
         return panel;
     }
 
-    // ---------- Sales / Payments History ----------
-    private JPanel createSalesHistoryPanel() {
+    // ---------- Paid Sales Tab ----------
+    private JPanel createPaidSalesPanel() {
         JPanel panel = new JPanel(new BorderLayout(8, 8));
         panel.setBackground(Color.WHITE);
         panel.setBorder(BorderFactory.createCompoundBorder(
@@ -375,94 +560,374 @@ public class SalesPanel extends JPanel {
                 BorderFactory.createEmptyBorder(12, 12, 12, 12)
         ));
 
-        // Top: sales list
-        String[] salesCols = {"Sale ID", "Sale #", "Customer", "Total", "Status", "Date"};
-        salesModel = new DefaultTableModel(salesCols, 0) {
-            @Override public boolean isCellEditable(int row, int col) { return false; }
-        };
-        salesTable = new JTable(salesModel);
-        salesTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-        salesTable.getSelectionModel().addListSelectionListener(new ListSelectionListener() {
-            @Override public void valueChanged(ListSelectionEvent e) {
-                if (!e.getValueIsAdjusting()) onSaleSelected();
-            }
-        });
+        // Header with title and refresh button
+        JPanel headerPanel = new JPanel(new BorderLayout());
+        headerPanel.setOpaque(false);
 
-        JScrollPane salesScroll = new JScrollPane(salesTable);
-        salesScroll.setBorder(BorderFactory.createTitledBorder("Recent Sales"));
+        JLabel title = new JLabel("Paid Sales - View Only");
+        title.setFont(new Font("Segoe UI", Font.BOLD, 14));
+        title.setForeground(new Color(96, 125, 139));
 
-        // Bottom: payments view + actions
-        JPanel bottom = new JPanel(new BorderLayout(8, 8));
-        paymentsModel = new DefaultTableModel(new String[]{"ID", "Method", "Amount", "Reference", "Paid At"}, 0) {
-            @Override public boolean isCellEditable(int row, int col) { return false; }
-        };
-        paymentsTable = new JTable(paymentsModel);
-        paymentsTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-
-        // double-click to edit payment
-        paymentsTable.addMouseListener(new MouseAdapter() {
-            public void mouseClicked(MouseEvent e) {
-                if (e.getClickCount() == 2) {
-                    int r = paymentsTable.rowAtPoint(e.getPoint());
-                    if (r >= 0) {
-                        paymentsTable.setRowSelectionInterval(r, r);
-                        showEditPaymentDialogForSelectedPayment();
-                    }
-                }
-            }
-        });
-
-        JScrollPane paymentsScroll = new JScrollPane(paymentsTable);
-        paymentsScroll.setBorder(BorderFactory.createTitledBorder("Payments for selected sale"));
-
-        // Selected sale label + action buttons
-        JPanel actions = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-        actions.setOpaque(false);
-        selectedSaleLabel = new JLabel("No sale selected");
-        JButton refreshBtn = new JButton("Refresh Sales");
-        JButton editPaymentBtn = new JButton("Edit Payment"); // explicit edit action
-
+        JButton refreshBtn = new JButton("Refresh");
         styleButton(refreshBtn, new Color(96, 125, 139));
-        styleButton(editPaymentBtn, new Color(255, 193, 7));
+        refreshBtn.addActionListener(e -> loadRecentSales());
 
-        // Refresh now clears current selection/payments and reloads authoritative sales from server
+        headerPanel.add(title, BorderLayout.WEST);
+        headerPanel.add(refreshBtn, BorderLayout.EAST);
+
+        // Compact search bar for Paid Sales
+        JPanel searchPanel = new JPanel(new BorderLayout(5, 0));
+        searchPanel.setOpaque(false);
+        searchPanel.setBorder(BorderFactory.createEmptyBorder(5, 0, 5, 0));
+        // constrain height so it doesn't grow
+        searchPanel.setPreferredSize(new Dimension(0, 40));
+
+        paidSalesSearchField = new JTextField();
+        paidSalesSearchField.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        paidSalesSearchField.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(new Color(200, 200, 200), 1),
+                BorderFactory.createEmptyBorder(5, 10, 5, 10)
+        ));
+        paidSalesSearchField.putClientProperty("JTextField.placeholderText", "Search paid sales...");
+
+        // Paid sales table - read only
+        String[] paidCols = {"Sale ID", "Sale #", "Customer", "Total", "Payment Method", "Date"};
+        paidSalesModel = new DefaultTableModel(paidCols, 0) {
+            @Override
+            public boolean isCellEditable(int row, int col) {
+                return false; // No editing allowed for paid sales
+            }
+        };
+        paidSalesTable = new JTable(paidSalesModel);
+        paidSalesTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        paidSalesTable.setEnabled(true);
+
+        // Setup TableRowSorter for filtering
+        paidSalesSorter = new TableRowSorter<>(paidSalesModel);
+        paidSalesTable.setRowSorter(paidSalesSorter);
+
+        // Add DocumentListener for real-time search
+        paidSalesSearchField.getDocument().addDocumentListener(new DocumentListener() {
+            @Override public void insertUpdate(DocumentEvent e) { filterPaidSales(paidSalesSearchField.getText()); }
+            @Override public void removeUpdate(DocumentEvent e) { filterPaidSales(paidSalesSearchField.getText()); }
+            @Override public void changedUpdate(DocumentEvent e) { filterPaidSales(paidSalesSearchField.getText()); }
+        });
+
+        JButton paidSearchBtn = new JButton("Search");
+        styleButton(paidSearchBtn, new Color(33, 150, 243));
+        paidSearchBtn.setPreferredSize(new Dimension(80, 30));
+        paidSearchBtn.addActionListener(e -> filterPaidSales(paidSalesSearchField.getText()));
+
+        searchPanel.add(paidSalesSearchField, BorderLayout.CENTER);
+        searchPanel.add(paidSearchBtn, BorderLayout.EAST);
+
+        // Put header + search into a top container and place it in NORTH
+        JPanel topPanel = new JPanel(new BorderLayout());
+        topPanel.setOpaque(false);
+        topPanel.add(headerPanel, BorderLayout.NORTH);
+        topPanel.add(searchPanel, BorderLayout.SOUTH);
+
+        JScrollPane paidSalesScroll = new JScrollPane(paidSalesTable);
+        paidSalesScroll.setBorder(BorderFactory.createTitledBorder("Paid Sales List"));
+
+        panel.add(topPanel, BorderLayout.NORTH);
+        panel.add(paidSalesScroll, BorderLayout.CENTER);
+
+        return panel;
+    }
+
+    private void filterPaidSales(String query) {
+        if (query == null || query.trim().isEmpty()) {
+            paidSalesSorter.setRowFilter(null);
+        } else {
+            RowFilter<DefaultTableModel, Integer> rowFilter = RowFilter.regexFilter("(?i)" + query);
+            paidSalesSorter.setRowFilter(rowFilter);
+        }
+    }
+
+    // ---------- Credit Sales Tab ----------
+    // ---------- Credit Sales Tab ----------
+    private JPanel createCreditSalesPanel() {
+        JPanel panel = new JPanel(new BorderLayout(8, 8));
+        panel.setBackground(Color.WHITE);
+        panel.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(new Color(230, 230, 230), 1),
+                BorderFactory.createEmptyBorder(12, 12, 12, 12)
+        ));
+
+        // Header with title and refresh button
+        JPanel headerPanel = new JPanel(new BorderLayout());
+        headerPanel.setOpaque(false);
+
+        JLabel title = new JLabel("Credit Sales");
+        title.setFont(new Font("Segoe UI", Font.BOLD, 14));
+        title.setForeground(new Color(96, 125, 139));
+
+        JButton refreshBtn = new JButton("Refresh");
+        styleButton(refreshBtn, new Color(96, 125, 139));
         refreshBtn.addActionListener(e -> {
-            selectedSaleLabel.setText("No sale selected");
-            paymentsModel.setRowCount(0);
+            selectedCreditSaleLabel.setText("No credit sale selected");
+            creditPaymentsModel.setRowCount(0);
             recentPayments.clear();
             loadRecentSales();
         });
 
-        editPaymentBtn.addActionListener(e -> showEditPaymentDialogForSelectedPayment());
+        headerPanel.add(title, BorderLayout.WEST);
+        headerPanel.add(refreshBtn, BorderLayout.EAST);
 
-        actions.add(selectedSaleLabel);
-        actions.add(refreshBtn);
-        actions.add(editPaymentBtn);
+        // Compact search bar for Credit Sales
+        JPanel searchPanel = new JPanel(new BorderLayout(5, 0));
+        searchPanel.setOpaque(false);
+        searchPanel.setBorder(BorderFactory.createEmptyBorder(5, 0, 5, 0));
+        searchPanel.setPreferredSize(new Dimension(0, 40));
+
+        creditSalesSearchField = new JTextField();
+        creditSalesSearchField.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        creditSalesSearchField.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(new Color(200, 200, 200), 1),
+                BorderFactory.createEmptyBorder(5, 10, 5, 10)
+        ));
+        creditSalesSearchField.putClientProperty("JTextField.placeholderText", "Search credit sales...");
+
+        String[] creditCols = {"Sale ID", "Sale #", "Customer", "Total", "Date"};
+        creditSalesModel = new DefaultTableModel(creditCols, 0) {
+            @Override public boolean isCellEditable(int row, int col) { return false; }
+        };
+        creditSalesTable = new JTable(creditSalesModel);
+        creditSalesTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+
+        // Setup TableRowSorter for filtering
+        creditSalesSorter = new TableRowSorter<>(creditSalesModel);
+        creditSalesTable.setRowSorter(creditSalesSorter);
+
+        creditSalesTable.getSelectionModel().addListSelectionListener(e -> {
+            if (!e.getValueIsAdjusting()) onCreditSaleSelected();
+        });
+
+        // Add DocumentListener for real-time search
+        creditSalesSearchField.getDocument().addDocumentListener(new DocumentListener() {
+            @Override public void insertUpdate(DocumentEvent e) { filterCreditSales(creditSalesSearchField.getText()); }
+            @Override public void removeUpdate(DocumentEvent e) { filterCreditSales(creditSalesSearchField.getText()); }
+            @Override public void changedUpdate(DocumentEvent e) { filterCreditSales(creditSalesSearchField.getText()); }
+        });
+
+        JButton creditSearchBtn = new JButton("Search");
+        styleButton(creditSearchBtn, new Color(33, 150, 243));
+        creditSearchBtn.setPreferredSize(new Dimension(80, 30));
+        creditSearchBtn.addActionListener(e -> filterCreditSales(creditSalesSearchField.getText()));
+
+        searchPanel.add(creditSalesSearchField, BorderLayout.CENTER);
+        searchPanel.add(creditSearchBtn, BorderLayout.EAST);
+
+        // Top panel with header + search
+        JPanel topPanel = new JPanel(new BorderLayout());
+        topPanel.setOpaque(false);
+        topPanel.add(headerPanel, BorderLayout.NORTH);
+        topPanel.add(searchPanel, BorderLayout.SOUTH);
+
+        JScrollPane creditSalesScroll = new JScrollPane(creditSalesTable);
+        creditSalesScroll.setBorder(BorderFactory.createTitledBorder("Credit Sales List"));
+
+        // Bottom: payments view + update payment button
+        JPanel bottom = new JPanel(new BorderLayout(8, 8));
+
+        creditPaymentsModel = new DefaultTableModel(new String[]{"ID", "Method", "Amount", "Reference", "Paid At"}, 0) {
+            @Override public boolean isCellEditable(int row, int col) { return false; }
+        };
+        creditPaymentsTable = new JTable(creditPaymentsModel);
+        creditPaymentsTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+
+        JScrollPane paymentsScroll = new JScrollPane(creditPaymentsTable);
+        paymentsScroll.setBorder(BorderFactory.createTitledBorder("Payments for selected credit sale"));
+
+        // Selected sale label + action buttons
+        JPanel actions = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5));
+        actions.setOpaque(false);
+        selectedCreditSaleLabel = new JLabel("No credit sale selected");
+        selectedCreditSaleLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+
+        JButton updatePaymentBtn = new JButton("Update Payment");
+        styleButton(updatePaymentBtn, new Color(255, 193, 7));
+        updatePaymentBtn.addActionListener(e -> showUpdatePaymentDialog());
+
+        actions.add(selectedCreditSaleLabel);
+        actions.add(Box.createHorizontalStrut(20));
+        actions.add(updatePaymentBtn);
 
         bottom.add(actions, BorderLayout.NORTH);
         bottom.add(paymentsScroll, BorderLayout.CENTER);
 
-        panel.add(salesScroll, BorderLayout.CENTER);
+        panel.add(topPanel, BorderLayout.NORTH);
+        panel.add(creditSalesScroll, BorderLayout.CENTER);
         panel.add(bottom, BorderLayout.SOUTH);
 
         return panel;
     }
 
-    private void onSaleSelected() {
-        int row = salesTable.getSelectedRow();
-        if (row < 0 || row >= recentSales.size()) {
-            selectedSaleLabel.setText("No sale selected");
-            paymentsModel.setRowCount(0);
+
+    private void filterCreditSales(String query) {
+        if (query == null || query.trim().isEmpty()) {
+            creditSalesSorter.setRowFilter(null);
+        } else {
+            RowFilter<DefaultTableModel, Integer> rowFilter = RowFilter.regexFilter("(?i)" + query);
+            creditSalesSorter.setRowFilter(rowFilter);
+        }
+    }
+
+    private void onCreditSaleSelected() {
+        int row = creditSalesTable.getSelectedRow();
+        if (row < 0) return;
+
+        // Convert view row to model row
+        int modelRow = creditSalesTable.convertRowIndexToModel(row);
+
+        if (modelRow < 0 || modelRow >= creditSales.size()) {
+            selectedCreditSaleLabel.setText("No credit sale selected");
+            creditPaymentsModel.setRowCount(0);
             recentPayments.clear();
             return;
         }
-        Map<String, Object> sale = recentSales.get(row);
+        Map<String, Object> sale = creditSales.get(modelRow);
         String saleNumber = Objects.toString(sale.get("saleNumber"), "N/A");
         String status = Objects.toString(sale.get("paymentStatus"), "N/A");
         Object saleIdObj = sale.get("saleId") != null ? sale.get("saleId") : sale.get("id");
         Integer saleId = safeIntegerFromObject(saleIdObj);
-        selectedSaleLabel.setText("Selected: " + saleNumber + " | Status: " + status);
+        selectedCreditSaleLabel.setText("Selected: " + saleNumber + " | Status: " + status);
         fetchPaymentsForSale(saleId);
+    }
+
+    private void showUpdatePaymentDialog() {
+        int row = creditSalesTable.getSelectedRow();
+        if (row < 0) {
+            showError("Select a credit sale first");
+            return;
+        }
+
+        // Convert view row to model row
+        int modelRow = creditSalesTable.convertRowIndexToModel(row);
+
+        if (modelRow < 0 || modelRow >= creditSales.size()) {
+            showError("Select a credit sale first");
+            return;
+        }
+
+        Map<String, Object> sale = creditSales.get(modelRow);
+        Integer saleId = safeIntegerFromObject(sale.get("saleId") != null ? sale.get("saleId") : sale.get("id"));
+        if (saleId == null) {
+            showError("Sale has no valid ID");
+            return;
+        }
+
+        // Get sale total
+        Double saleTotal = safeDoubleFromObject(sale.get("totalAmount") != null ? sale.get("totalAmount") : sale.get("total"));
+        if (saleTotal == null) saleTotal = 0.0;
+
+        // Create dialog
+        JDialog dialog = new JDialog((Frame) SwingUtilities.getWindowAncestor(this), "Update Payment", true);
+        dialog.setLayout(new BorderLayout());
+        dialog.setMinimumSize(new Dimension(400, 250));
+
+        JPanel form = new JPanel(new GridLayout(5, 2, 8, 8));
+        form.setBorder(BorderFactory.createEmptyBorder(15, 15, 15, 15));
+
+        JLabel saleIdLabel = new JLabel("Sale ID:");
+        JTextField saleIdField = new JTextField(String.valueOf(saleId));
+        saleIdField.setEditable(false);
+
+        JLabel saleTotalLabel = new JLabel("Sale Total:");
+        JTextField saleTotalField = new JTextField(String.format("₦ %,.2f", saleTotal));
+        saleTotalField.setEditable(false);
+
+        JLabel paymentAmountLabel = new JLabel("Payment Amount:");
+        JTextField paymentAmountField = new JTextField(String.format("%.2f", saleTotal));
+        paymentAmountField.setEditable(false);
+
+        JLabel emailLabel = new JLabel("Send Receipt:");
+        JCheckBox sendReceiptCheckbox = new JCheckBox();
+        JTextField emailField = new JTextField();
+        emailField.setVisible(false);
+
+        String customerEmail = getEmailForSale(sale);
+        if (customerEmail != null && !customerEmail.isEmpty()) {
+            emailField.setText(customerEmail);
+            sendReceiptCheckbox.setSelected(true);
+            emailField.setVisible(true);
+        } else {
+            // Try to get email from customer details
+            customerEmail = getCustomerEmail(sale);
+            if (customerEmail != null && !customerEmail.isEmpty()) {
+                emailField.setText(customerEmail);
+                sendReceiptCheckbox.setSelected(true);
+                emailField.setVisible(true);
+            }
+        }
+
+        sendReceiptCheckbox.addActionListener(e -> {
+            emailField.setVisible(sendReceiptCheckbox.isSelected());
+            dialog.pack();
+        });
+
+        form.add(saleIdLabel);
+        form.add(saleIdField);
+        form.add(saleTotalLabel);
+        form.add(saleTotalField);
+        form.add(paymentAmountLabel);
+        form.add(paymentAmountField);
+        form.add(emailLabel);
+        form.add(sendReceiptCheckbox);
+        form.add(new JLabel("Email:"));
+        form.add(emailField);
+
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        JButton cancelBtn = new JButton("Cancel");
+        JButton updateBtn = new JButton("Add Payment");
+
+        styleButton(updateBtn, new Color(76, 175, 80));
+        cancelBtn.addActionListener(e -> dialog.dispose());
+        updateBtn.addActionListener(e -> {
+            try {
+                Double paymentAmount = Double.parseDouble(paymentAmountField.getText().trim());
+                if (paymentAmount <= 0) {
+                    showError("Payment amount must be greater than 0");
+                    return;
+                }
+
+                if (sendReceiptCheckbox.isSelected() &&
+                        (emailField.getText() == null || emailField.getText().trim().isEmpty())) {
+                    showError("Please provide email address for receipt");
+                    return;
+                }
+
+                processPaymentUpdate(saleId, paymentAmount,
+                        sendReceiptCheckbox.isSelected() ? emailField.getText().trim() : null);
+                dialog.dispose();
+            } catch (NumberFormatException ex) {
+                showError("Invalid payment amount format");
+            }
+        });
+
+        buttonPanel.add(cancelBtn);
+        buttonPanel.add(updateBtn);
+
+        dialog.add(form, BorderLayout.CENTER);
+        dialog.add(buttonPanel, BorderLayout.SOUTH);
+        dialog.pack();
+        dialog.setLocationRelativeTo(this);
+        dialog.setVisible(true);
+    }
+
+    private Double calculatePaidAmount(Integer saleId) {
+        double totalPaid = 0.0;
+        for (Map<String, Object> payment : recentPayments) {
+            Integer paymentSaleId = safeIntegerFromObject(payment.get("saleId"));
+            if (paymentSaleId != null && paymentSaleId.equals(saleId)) {
+                Double amount = safeDoubleFromObject(payment.get("amount"));
+                if (amount != null) {
+                    totalPaid += amount;
+                }
+            }
+        }
+        return totalPaid;
     }
 
     // ---------- Networking / Data ----------
@@ -498,17 +963,14 @@ public class SalesPanel extends JPanel {
         w.execute();
     }
 
-    /**
-     * Loads ALL sales from the server and replaces local cache.
-     * This method is intentionally authoritative: server results always override local history.
-     */
     private void loadRecentSales() {
         SwingWorker<Void, Void> w = new SwingWorker<>() {
             private Exception error = null;
             private List<Map<String, Object>> fetched = new ArrayList<>();
+
             @Override protected Void doInBackground() {
                 try {
-                    String resp = client.get("/api/secure/sales"); // authoritative source
+                    String resp = client.get("/api/secure/sales");
                     if (resp == null || resp.trim().isEmpty()) return null;
                     try {
                         fetched = client.parseResponseList(resp);
@@ -524,18 +986,62 @@ public class SalesPanel extends JPanel {
 
             @Override protected void done() {
                 if (error != null) {
-                    // If fetching failed, do not modify the cache; show error
                     showError("Failed to load sales from server: " + error.getMessage());
                     return;
                 }
-                // Always replace recentSales with the fetched list (server-authoritative).
-                recentSales.clear();
-                if (fetched != null && !fetched.isEmpty()) recentSales.addAll(fetched);
-                // If fetched is empty, recentSales remains empty (server says no sales)
-                updateSalesTable();
+
+                // Separate sales into paid and credit based on payment_status
+                paidSales.clear();
+                creditSales.clear();
+
+                if (fetched != null) {
+                    for (Map<String, Object> sale : fetched) {
+                        String status = Objects.toString(sale.get("paymentStatus"), "").toLowerCase();
+
+                        // Check for pending/credit status (based on your requirements)
+                        if ("paid".equals(status) || "completed".equals(status) || "cash".equals(status)) {
+                            paidSales.add(sale);
+                        } else if ("pending".equals(status) || "credit".equals(status) ||
+                                "partially paid".equals(status) || "unpaid".equals(status) ||
+                                "partial".equals(status)) {
+                            creditSales.add(sale);
+                        } else {
+                            // Default: if status is not recognized, check if there's a total payment
+                            Double total = safeDoubleFromObject(sale.get("totalAmount"));
+                            Double paid = calculatePaidAmountForSale(sale);
+                            if (paid != null && total != null && Math.abs(paid - total) < 0.01) {
+                                paidSales.add(sale);
+                            } else {
+                                creditSales.add(sale);
+                            }
+                        }
+                    }
+                }
+
+                updatePaidSalesTable();
+                updateCreditSalesTable();
             }
         };
         w.execute();
+    }
+
+    private Double calculatePaidAmountForSale(Map<String, Object> sale) {
+        Integer saleId = safeIntegerFromObject(sale.get("saleId") != null ? sale.get("saleId") : sale.get("id"));
+        if (saleId == null) return 0.0;
+
+        // Try to get from payments if available in the sale object
+        if (sale.containsKey("payments") && sale.get("payments") instanceof List) {
+            List<Map<String, Object>> payments = (List<Map<String, Object>>) sale.get("payments");
+            double totalPaid = 0.0;
+            for (Map<String, Object> payment : payments) {
+                Double amount = safeDoubleFromObject(payment.get("amount"));
+                if (amount != null) {
+                    totalPaid += amount;
+                }
+            }
+            return totalPaid;
+        }
+        return 0.0;
     }
 
     private void updateProductGrid() {
@@ -548,64 +1054,115 @@ public class SalesPanel extends JPanel {
         } else {
             for (Map<String, Object> product : products) {
                 String name = getStringValue(product, "name", "Unknown Product");
+                String description = getStringValue(product, "description", "");
                 Double price = getDoubleValue(product, "minimumSellingPrice", 0.0);
                 Integer productId = getIntegerValue(product, "id", 0);
-                productGrid.add(createProductButton(name, price, productId));
+
+                productGrid.add(
+                        createProductButton(name, description, price, productId)
+                );
             }
+
         }
         productGrid.revalidate();
         productGrid.repaint();
     }
 
-    private void updateSalesTable() {
+    private void updatePaidSalesTable() {
         SwingUtilities.invokeLater(() -> {
-            salesModel.setRowCount(0);
-            for (Map<String, Object> sale : recentSales) {
-                Integer saleId = safeIntegerFromObject(sale.get("saleId") != null ? sale.get("saleId") : sale.get("id"));
-                String saleNumber = Objects.toString(sale.get("saleNumber"), Objects.toString(sale.get("saleNo"), "N/A"));
-
-                // Prefer showing "Name (phone)" if available, else fallback to phone or id
-                String customerDisplay = "N/A";
-                if (sale.containsKey("customerName") || sale.containsKey("customerPhone")) {
-                    String n = Objects.toString(sale.get("customerName"), "").trim();
-                    String p = Objects.toString(sale.get("customerPhone"), "").trim();
-                    if (!n.isEmpty() && !p.isEmpty()) customerDisplay = n + " (" + p + ")";
-                    else if (!n.isEmpty()) customerDisplay = n;
-                    else if (!p.isEmpty()) customerDisplay = p;
-                } else if (sale.containsKey("customer") && sale.get("customer") instanceof Map) {
-                    Map<String, Object> c = (Map<String, Object>) sale.get("customer");
-                    String n = Objects.toString(c.get("name"), "").trim();
-                    String p = Objects.toString(c.get("phone"), "").trim();
-                    if (!n.isEmpty() && !p.isEmpty()) customerDisplay = n + " (" + p + ")";
-                    else if (!n.isEmpty()) customerDisplay = n;
-                    else if (!p.isEmpty()) customerDisplay = p;
-                } else {
-                    customerDisplay = Objects.toString(sale.get("customerId"), Objects.toString(sale.get("customerPhone"), "N/A"));
-                }
-
-                Double total = safeDoubleFromObject(sale.get("totalAmount") != null ? sale.get("totalAmount") : sale.get("total"));
-                String status = Objects.toString(sale.get("paymentStatus"), "N/A");
-                String date = Objects.toString(sale.get("saleDate"), "");
-                salesModel.addRow(new Object[]{
-                        saleId,
-                        saleNumber,
-                        customerDisplay,
-                        String.format("₦ %,.2f", total == null ? 0.0 : total),
-                        status,
-                        date.length() > 16 ? date.substring(0, 16) : date
-                });
+            paidSalesModel.setRowCount(0);
+            for (Map<String, Object> sale : paidSales) {
+                addSaleToTable(paidSalesModel, sale);
             }
+            filterPaidSales(paidSalesSearchField != null ? paidSalesSearchField.getText() : "");
         });
+    }
+
+    private void updateCreditSalesTable() {
+        SwingUtilities.invokeLater(() -> {
+            creditSalesModel.setRowCount(0);
+            for (Map<String, Object> sale : creditSales) {
+                addSaleToTable(creditSalesModel, sale);
+            }
+            filterCreditSales(creditSalesSearchField != null ? creditSalesSearchField.getText() : "");
+        });
+    }
+
+    private void addSaleToTable(DefaultTableModel model, Map<String, Object> sale) {
+        Integer saleId = safeIntegerFromObject(sale.get("saleId") != null ? sale.get("saleId") : sale.get("id"));
+        String saleNumber = Objects.toString(sale.get("saleNumber"), Objects.toString(sale.get("saleNo"), "N/A"));
+
+        String customerDisplay = getCustomerDisplay(sale);
+        Double total = safeDoubleFromObject(sale.get("totalAmount") != null ? sale.get("totalAmount") : sale.get("total"));
+        String date = Objects.toString(sale.get("saleDate"), "");
+
+        if (model == paidSalesModel) {
+            String paymentMethod = getPaymentMethod(sale);
+            model.addRow(new Object[]{
+                    saleId,
+                    saleNumber,
+                    customerDisplay,
+                    total != null ? total : 0.0,
+                    paymentMethod,
+                    date.length() > 16 ? date.substring(0, 16) : date
+            });
+        } else if (model == creditSalesModel) {
+            // REMOVED Balance Due column and calculation
+            model.addRow(new Object[]{
+                    saleId,
+                    saleNumber,
+                    customerDisplay,
+                    total != null ? total : 0.0,
+                    date.length() > 16 ? date.substring(0, 16) : date
+            });
+        }
+    }
+
+    private String getCustomerDisplay(Map<String, Object> sale) {
+        if (sale.containsKey("customerName") || sale.containsKey("customerPhone")) {
+            String n = Objects.toString(sale.get("customerName"), "").trim();
+            String p = Objects.toString(sale.get("customerPhone"), "").trim();
+            if (!n.isEmpty() && !p.isEmpty()) return n + " (" + p + ")";
+            else if (!n.isEmpty()) return n;
+            else if (!p.isEmpty()) return p;
+        } else if (sale.containsKey("customer") && sale.get("customer") instanceof Map) {
+            Map<String, Object> c = (Map<String, Object>) sale.get("customer");
+            String n = Objects.toString(c.get("name"), "").trim();
+            String p = Objects.toString(c.get("phone"), "").trim();
+            if (!n.isEmpty() && !p.isEmpty()) return n + " (" + p + ")";
+            else if (!n.isEmpty()) return n;
+            else if (!p.isEmpty()) return p;
+        }
+        return Objects.toString(sale.get("customerId"), Objects.toString(sale.get("customerPhone"), "N/A"));
+    }
+
+    private String getPaymentMethod(Map<String, Object> sale) {
+        String method = Objects.toString(sale.get("paymentMethod"), "N/A");
+        String status = Objects.toString(sale.get("paymentStatus"), "");
+
+        if ("paid".equalsIgnoreCase(status) && "N/A".equals(method)) {
+            return "CASH";
+        }
+        return method;
+    }
+
+    private String getCustomerEmail(Map<String, Object> sale) {
+        if (sale.containsKey("customer") && sale.get("customer") instanceof Map) {
+            Map<String, Object> c = (Map<String, Object>) sale.get("customer");
+            return Objects.toString(c.get("email"), "").trim();
+        }
+        return "";
     }
 
     private void fetchPaymentsForSale(Integer saleId) {
         if (saleId == null) {
-            paymentsModel.setRowCount(0);
+            creditPaymentsModel.setRowCount(0);
             recentPayments.clear();
             return;
         }
         SwingWorker<Void, Void> w = new SwingWorker<>() {
             private List<Map<String, Object>> payments = new ArrayList<>();
+
             @Override protected Void doInBackground() {
                 try {
                     String resp = client.get("/api/secure/payments/sale/" + saleId);
@@ -621,8 +1178,9 @@ public class SalesPanel extends JPanel {
                 } catch (Exception ex) { ex.printStackTrace(); }
                 return null;
             }
+
             @Override protected void done() {
-                paymentsModel.setRowCount(0);
+                creditPaymentsModel.setRowCount(0);
                 recentPayments.clear();
                 if (payments != null) {
                     recentPayments.addAll(payments);
@@ -632,10 +1190,10 @@ public class SalesPanel extends JPanel {
                         Double amount = safeDoubleFromObject(p.get("amount"));
                         String reference = Objects.toString(p.get("reference"), "N/A");
                         String paidAt = Objects.toString(p.get("paidAt"), "");
-                        paymentsModel.addRow(new Object[]{
+                        creditPaymentsModel.addRow(new Object[]{
                                 id,
                                 method,
-                                String.format("₦ %,.2f", amount == null ? 0.0 : amount),
+                                amount != null ? amount : 0.0,
                                 reference,
                                 paidAt.length() > 16 ? paidAt.substring(0, 16) : paidAt
                         });
@@ -646,14 +1204,19 @@ public class SalesPanel extends JPanel {
         w.execute();
     }
 
-
     // ---------- Process Sale ----------
-    private void processSale(String phone, String name, String paymentMethod) {
+    private void processSale(String phone, String name, String paymentMethod, boolean sendReceipt, String email) {
         if (cartItems.isEmpty()) { showError("Cart is empty!"); return; }
         if (phone == null || phone.trim().isEmpty()) { showError("Please enter customer phone number"); return; }
         if (!"CASH".equalsIgnoreCase(paymentMethod) && !"CREDIT".equalsIgnoreCase(paymentMethod)) {
             showError("Invalid payment method"); return;
         }
+
+        if (sendReceipt && (email == null || email.trim().isEmpty())) {
+            showError("Please provide an email address to send receipt"); return;
+        }
+
+        SwingUtilities.invokeLater(() -> checkoutBtn.setEnabled(false));
 
         SwingWorker<Void, Void> w = new SwingWorker<>() {
             private String resultMessage = "Unknown error";
@@ -664,7 +1227,6 @@ public class SalesPanel extends JPanel {
                 try {
                     Map<String, Object> saleRequest = new HashMap<>();
                     saleRequest.put("customerPhone", phone);
-                    // include optional name if provided so service can persist it
                     if (name != null && !name.trim().isEmpty()) saleRequest.put("customerName", name.trim());
                     saleRequest.put("discountTotal", 0);
 
@@ -697,9 +1259,7 @@ public class SalesPanel extends JPanel {
                     }
                     if (saleData == null) { success = false; resultMessage = "Sale created but server returned no sale data."; return null; }
 
-                    // Add created sale to local history only if not already present.
                     createdSaleData = new HashMap<>(saleData);
-                    addSaleToHistory(createdSaleData);
 
                     Integer saleId = safeIntegerFromObject(saleData.get("saleId") != null ? saleData.get("saleId") : saleData.get("id"));
                     Double authoritativeTotal = safeDoubleFromObject(saleData.get("totalAmount") != null ? saleData.get("totalAmount") : saleData.get("total"));
@@ -707,7 +1267,7 @@ public class SalesPanel extends JPanel {
                     if ("CASH".equalsIgnoreCase(paymentMethod)) {
                         if (saleId == null) {
                             resultMessage = "Sale created but server did not return sale id; cannot record payment automatically.";
-                            success = true; // sale created but payment not recorded
+                            success = true;
                             return null;
                         }
                         double amountToPay = authoritativeTotal != null ? authoritativeTotal : calculateTotalAmount();
@@ -717,18 +1277,19 @@ public class SalesPanel extends JPanel {
                         paymentRequest.put("amount", amountToPay);
                         paymentRequest.put("reference", "CASH-" + System.currentTimeMillis());
 
-                        // For brand-new sale there won't be a payment to update; POST is appropriate here.
+                        if (sendReceipt && email != null && !email.trim().isEmpty()) {
+                            paymentRequest.put("email", email.trim());
+                        }
+
                         String payResp = client.post("/api/secure/payments", paymentRequest);
                         boolean paySuccess = client.isResponseSuccessful(payResp);
                         String payMsg = client.getResponseMessage(payResp);
 
-                        // if server returns success, we can refresh the sale entry (it may have been updated to PAID)
                         if (paySuccess) {
                             resultMessage = "Sale and payment recorded successfully (Sale ID: " + saleId + ").";
                             success = true;
                             try { refreshSaleFromServer(saleId); } catch (Exception ignored) {}
                         } else {
-                            // fallback: try to verify by reading payments for the sale
                             double amountToVerify = amountToPay;
                             boolean verified = verifyPaymentByListing(saleId, amountToVerify);
                             if (verified) {
@@ -742,13 +1303,16 @@ public class SalesPanel extends JPanel {
                         }
                     } else { // CREDIT
                         double amountToPay = authoritativeTotal != null ? authoritativeTotal : calculateTotalAmount();
-                        // optionally record a zero-amount credit payment (best-effort)
                         if (saleId != null) {
                             Map<String, Object> creditPayment = new HashMap<>();
                             creditPayment.put("saleId", saleId);
                             creditPayment.put("paymentMethod", "CREDIT");
                             creditPayment.put("amount", amountToPay);
                             creditPayment.put("reference", "CREDIT-" + System.currentTimeMillis());
+
+                            if (sendReceipt && email != null && !email.trim().isEmpty()) {
+                                creditPayment.put("email", email.trim());
+                            }
                             try {
                                 client.post("/api/secure/payments", creditPayment);
                             } catch (Exception ignored) {}
@@ -765,12 +1329,13 @@ public class SalesPanel extends JPanel {
             }
 
             @Override protected void done() {
+                SwingUtilities.invokeLater(() -> checkoutBtn.setEnabled(true));
+
                 if (success) {
                     JOptionPane.showMessageDialog(SalesPanel.this, resultMessage, "Success", JOptionPane.INFORMATION_MESSAGE);
                     clearCart();
                     if (searchField != null) searchField.setText("");
-                    // after creating sale we rely on server-authoritative load; but still update UI
-                    loadRecentSales(); // refresh authoritative list
+                    loadRecentSales();
                 } else {
                     JOptionPane.showMessageDialog(SalesPanel.this, resultMessage, "Error", JOptionPane.ERROR_MESSAGE);
                 }
@@ -779,36 +1344,94 @@ public class SalesPanel extends JPanel {
         w.execute();
     }
 
-    // ---------- Add sale to local history (immediate UI feedback) ----------
+    private void processPaymentUpdate(Integer saleId, double paymentAmount, String email) {
+        SwingWorker<Void, Void> w = new SwingWorker<>() {
+            private String resultMessage = "Unknown error";
+            private boolean success = false;
+
+            @Override protected Void doInBackground() {
+                try {
+                    Map<String, Object> paymentRequest = new HashMap<>();
+                    paymentRequest.put("saleId", saleId);
+                    paymentRequest.put("paymentMethod", "CASH"); // Always CASH for payment updates
+                    paymentRequest.put("amount", paymentAmount);
+                    paymentRequest.put("reference", "PAYMENT-UPDATE-" + System.currentTimeMillis());
+
+                    if (email != null && !email.trim().isEmpty()) {
+                        paymentRequest.put("email", email.trim());
+                    }
+
+                    String payResp = client.post("/api/secure/payments", paymentRequest);
+                    boolean paySuccess = client.isResponseSuccessful(payResp);
+                    String payMsg = client.getResponseMessage(payResp);
+
+                    if (paySuccess) {
+                        resultMessage = "Payment added successfully for Sale ID: " + saleId;
+                        success = true;
+
+                        // Refresh data
+                        fetchPaymentsForSale(saleId);
+                        loadRecentSales();
+                    } else {
+                        resultMessage = "Payment update failed: " + payMsg;
+                        success = false;
+                    }
+                } catch (Exception e) {
+                    success = false;
+                    resultMessage = "Error: " + e.getMessage();
+                    e.printStackTrace();
+                }
+                return null;
+            }
+
+            @Override protected void done() {
+                if (success) {
+                    JOptionPane.showMessageDialog(SalesPanel.this, resultMessage, "Success", JOptionPane.INFORMATION_MESSAGE);
+                    // Switch to credit sales tab to see updated status
+                    rightTabs.setSelectedComponent(creditSalesPanel);
+                } else {
+                    JOptionPane.showMessageDialog(SalesPanel.this, resultMessage, "Error", JOptionPane.ERROR_MESSAGE);
+                }
+            }
+        };
+        w.execute();
+    }
+
     private void addSaleToHistory(Map<String, Object> saleData) {
+        String status = Objects.toString(saleData.get("paymentStatus"), "").toLowerCase();
         Integer incomingId = safeIntegerFromObject(saleData.get("saleId") != null ? saleData.get("saleId") : saleData.get("id"));
-        // if the server list already contains this sale id, skip adding local duplicate
-        boolean exists = false;
-        if (incomingId != null) {
-            for (Map<String, Object> s : recentSales) {
+
+        if ("paid".equals(status) || "completed".equals(status) || "cash".equals(status)) {
+            // Add to paid sales
+            boolean exists = false;
+            for (Map<String, Object> s : paidSales) {
                 Integer sid = safeIntegerFromObject(s.get("saleId") != null ? s.get("saleId") : s.get("id"));
                 if (sid != null && sid.equals(incomingId)) { exists = true; break; }
             }
-        }
-        if (!exists) {
-            Map<String, Object> normalized = new HashMap<>(saleData);
-            if (!normalized.containsKey("saleId") && normalized.containsKey("id")) {
-                normalized.put("saleId", normalized.get("id"));
+            if (!exists) {
+                paidSales.add(0, saleData);
+                updatePaidSalesTable();
             }
-            if (!normalized.containsKey("totalAmount") && normalized.containsKey("total")) {
-                normalized.put("totalAmount", normalized.get("total"));
+        } else if ("pending".equals(status) || "credit".equals(status) ||
+                "partially paid".equals(status) || "unpaid".equals(status) ||
+                "partial".equals(status)) {
+            // Add to credit sales
+            boolean exists = false;
+            for (Map<String, Object> s : creditSales) {
+                Integer sid = safeIntegerFromObject(s.get("saleId") != null ? s.get("saleId") : s.get("id"));
+                if (sid != null && sid.equals(incomingId)) { exists = true; break; }
             }
-            recentSales.add(0, normalized);
-            if (recentSales.size() > 200) recentSales.remove(recentSales.size() - 1);
-            updateSalesTable();
+            if (!exists) {
+                creditSales.add(0, saleData);
+                updateCreditSalesTable();
+            }
         }
     }
 
-    // ---------- Try refresh single sale from server (if endpoint exists) ----------
     private void refreshSaleFromServer(Integer saleId) {
         if (saleId == null) return;
         try {
-            String resp = client.get("/api/secure/sales/" + saleId); // optimistic endpoint
+            String resp = client.get("/api/secure/sales/" + saleId);
             if (resp == null || resp.trim().isEmpty()) return;
             Map<String, Object> result = client.parseResponse(resp);
             Map<String, Object> saleData = null;
@@ -820,21 +1443,11 @@ public class SalesPanel extends JPanel {
                 }
             }
             if (saleData != null) {
-                for (int i = 0; i < recentSales.size(); i++) {
-                    Integer sid = safeIntegerFromObject(recentSales.get(i).get("saleId"));
-                    if (sid != null && sid.equals(saleId)) {
-                        recentSales.set(i, saleData);
-                        updateSalesTable();
-                        return;
-                    }
-                }
-                // If not found, add it at top
                 addSaleToHistory(saleData);
             }
         } catch (Exception ignored) {}
     }
 
-    // ---------- Verify payment by listing payments for sale ----------
     private boolean verifyPaymentByListing(Integer saleId, double expectedAmount) {
         if (saleId == null) return false;
         try {
@@ -859,245 +1472,8 @@ public class SalesPanel extends JPanel {
         return false;
     }
 
-    // ---------- Show dialog to record a manual payment for selected sale ----------
-    private void showRecordPaymentDialogForSelectedSale() {
-        int saleRow = salesTable.getSelectedRow();
-        if (saleRow < 0 || saleRow >= recentSales.size()) {
-            showError("Select a sale first");
-            return;
-        }
-
-        if (recentPayments.isEmpty()) {
-            showError(
-                    "This sale has no payment record.\n" +
-                            "Payments can only be created at checkout (Cart tab)."
-            );
-            return;
-        }
-
-        int selPaymentRow = paymentsTable.getSelectedRow();
-        if (selPaymentRow < 0 || selPaymentRow >= recentPayments.size()) {
-            showError("Select the payment you want to update.");
-            return;
-        }
-
-        Map<String, Object> sale = recentSales.get(saleRow);
-        Map<String, Object> payment = recentPayments.get(selPaymentRow);
-
-        Integer saleId = safeIntegerFromObject(
-                sale.get("saleId") != null ? sale.get("saleId") : sale.get("id")
-        );
-        Integer paymentIdToUpdate = safeIntegerFromObject(payment.get("id"));
-
-        if (paymentIdToUpdate == null) {
-            showError("Selected payment has no ID and cannot be updated.");
-            return;
-        }
-
-        Double existingAmount = safeDoubleFromObject(payment.get("amount"));
-
-        // ---- Dialog ----
-        JPanel form = new JPanel(new GridLayout(4, 2, 8, 8));
-
-        JTextField saleIdField = new JTextField(String.valueOf(saleId));
-        saleIdField.setEditable(false);
-
-        JTextField paymentIdField = new JTextField(String.valueOf(paymentIdToUpdate));
-        paymentIdField.setEditable(false);
-
-        JTextField amountField = new JTextField(
-                existingAmount == null ? "0.00" : String.format("%.2f", existingAmount)
-        );
-
-        JComboBox<String> methodCb = new JComboBox<>(new String[]{"CASH", "CREDIT"});
-        methodCb.setSelectedItem(
-                Objects.toString(payment.get("paymentMethod"), "CREDIT")
-        );
-
-        JTextField refField = new JTextField(
-                Objects.toString(payment.get("reference"), "MANUAL-" + System.currentTimeMillis())
-        );
-
-        form.add(new JLabel("Sale ID:"));      form.add(saleIdField);
-        form.add(new JLabel("Payment ID:"));   form.add(paymentIdField);
-        form.add(new JLabel("Amount:"));       form.add(amountField);
-        form.add(new JLabel("Method:"));       form.add(methodCb);
-        form.add(new JLabel("Reference:"));    form.add(refField);
-
-        int option = JOptionPane.showConfirmDialog(
-                this,
-                form,
-                "Update Payment for Sale " + saleId,
-                JOptionPane.OK_CANCEL_OPTION,
-                JOptionPane.PLAIN_MESSAGE
-        );
-
-        if (option != JOptionPane.OK_OPTION) return;
-
-        double newAmount;
-        try {
-            newAmount = Double.parseDouble(amountField.getText().trim());
-        } catch (Exception e) {
-            showError("Invalid amount");
-            return;
-        }
-
-        String newMethod = (String) methodCb.getSelectedItem();
-        String newReference = refField.getText().trim();
-
-        // ---- Update payment (PUT ONLY) ----
-        SwingWorker<Void, Void> w = new SwingWorker<>() {
-            private boolean ok = false;
-            private String msg = "Unknown error";
-
-            @Override
-            protected Void doInBackground() {
-                try {
-                    Map<String, Object> payload = new HashMap<>();
-                    payload.put("amount", newAmount);
-                    payload.put("paymentMethod", newMethod);
-                    payload.put("reference", newReference);
-
-                    String resp = client.put(
-                            "/api/secure/payments/" + paymentIdToUpdate,
-                            payload
-                    );
-
-                    boolean success = client.isResponseSuccessful(resp);
-                    String serverMsg = client.getResponseMessage(resp);
-
-                    if (!success) {
-                        msg = "Payment update failed: " + serverMsg;
-                        return null;
-                    }
-
-                    ok = true;
-                    msg = "Payment updated successfully";
-
-                    // Refresh UI from server
-                    fetchPaymentsForSale(saleId);
-                    refreshSaleFromServer(saleId);
-
-                } catch (Exception ex) {
-                    msg = "Error: " + ex.getMessage();
-                    ok = false;
-                }
-                return null;
-            }
-
-            @Override
-            protected void done() {
-                if (ok) {
-                    JOptionPane.showMessageDialog(
-                            SalesPanel.this,
-                            msg,
-                            "Success",
-                            JOptionPane.INFORMATION_MESSAGE
-                    );
-                    updateSalesTable();
-                } else {
-                    JOptionPane.showMessageDialog(
-                            SalesPanel.this,
-                            msg,
-                            "Error",
-                            JOptionPane.ERROR_MESSAGE
-                    );
-                }
-            }
-        };
-
-        w.execute();
-    }
-
-
-    // ---------- Edit Payment (explicit) ----------
-    private void showEditPaymentDialogForSelectedPayment() {
-        int selSaleRow = salesTable.getSelectedRow();
-        int selPaymentRow = paymentsTable.getSelectedRow();
-        if (selSaleRow < 0 || selSaleRow >= recentSales.size()) { showError("Select a sale first"); return; }
-        if (selPaymentRow < 0 || selPaymentRow >= recentPayments.size()) { showError("Select a payment to edit"); return; }
-
-        Map<String, Object> payment = recentPayments.get(selPaymentRow);
-        Integer paymentId = safeIntegerFromObject(payment.get("id"));
-        if (paymentId == null) { showError("Selected payment has no id"); return; }
-
-        JPanel form = new JPanel(new GridLayout(4, 2, 8, 8));
-        JTextField idField = new JTextField(String.valueOf(paymentId));
-        idField.setEditable(false);
-        Double amt = safeDoubleFromObject(payment.get("amount"));
-        JTextField amountField = new JTextField(amt == null ? "0.00" : String.format("%.2f", amt));
-        JComboBox<String> methodCb = new JComboBox<>(new String[]{"CASH", "CREDIT"});
-        methodCb.setSelectedItem(Objects.toString(payment.get("paymentMethod"), "CASH"));
-        JTextField refField = new JTextField(Objects.toString(payment.get("reference"), "MANUAL-" + System.currentTimeMillis()));
-
-        form.add(new JLabel("Payment ID:")); form.add(idField);
-        form.add(new JLabel("Amount:")); form.add(amountField);
-        form.add(new JLabel("Method:")); form.add(methodCb);
-        form.add(new JLabel("Reference:")); form.add(refField);
-
-        int option = JOptionPane.showConfirmDialog(this, form,
-                "Edit Payment " + paymentId, JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
-
-        if (option != JOptionPane.OK_OPTION) return;
-
-        double newAmount;
-        try { newAmount = Double.parseDouble(amountField.getText().trim()); } catch (Exception e) { showError("Invalid amount"); return; }
-        String newMethod = (String) methodCb.getSelectedItem();
-        String newRef = refField.getText().trim();
-
-        SwingWorker<Void, Void> w = new SwingWorker<>() {
-            private boolean ok = false;
-            private String msg = "Unknown error";
-            @Override protected Void doInBackground() {
-                try {
-                    Map<String, Object> pm = new HashMap<>();
-                    pm.put("amount", newAmount);
-                    pm.put("paymentMethod", newMethod);
-                    pm.put("reference", newRef);
-
-                    String resp;
-                    try {
-                        resp = client.put("/api/secure/payments/" + paymentId, pm);
-                    } catch (NoSuchMethodError nsme) {
-                        resp = client.post("/api/secure/payments/" + paymentId, pm);
-                    }
-
-                    boolean success = client.isResponseSuccessful(resp);
-                    String serverMsg = client.getResponseMessage(resp);
-                    if (success) {
-                        ok = true;
-                        msg = "Payment updated: " + serverMsg;
-                        // refresh payments and sale
-                        int saleRow = salesTable.getSelectedRow();
-                        Map<String, Object> sale = recentSales.get(saleRow);
-                        Integer saleId = safeIntegerFromObject(sale.get("saleId") != null ? sale.get("saleId") : sale.get("id"));
-                        fetchPaymentsForSale(saleId);
-                        try { refreshSaleFromServer(saleId); } catch (Exception ignored) {}
-                    } else {
-                        ok = false;
-                        msg = "Update failed: " + serverMsg;
-                    }
-                } catch (Exception ex) {
-                    ok = false;
-                    msg = "Error: " + ex.getMessage();
-                }
-                return null;
-            }
-            @Override
-            protected void done() {
-                if (ok) {
-                    JOptionPane.showMessageDialog(SalesPanel.this, msg, "Success", JOptionPane.INFORMATION_MESSAGE);
-                    updateSalesTable();
-                } else {
-                    JOptionPane.showMessageDialog(SalesPanel.this, msg, "Error", JOptionPane.ERROR_MESSAGE);
-                }
-            }
-        };
-        w.execute();
-    }
-
     // ---------- Helpers ----------
-    private void addToCart(Integer productId, String product, double price) {
+    private void addToCart(Integer productId, String product, double price, double minPrice) {
         for (CartItem item : cartItems) {
             if (item.productId.equals(productId)) {
                 item.quantity++;
@@ -1107,7 +1483,7 @@ public class SalesPanel extends JPanel {
                 return;
             }
         }
-        cartItems.add(new CartItem(productId, product, price, 1));
+        cartItems.add(new CartItem(productId, product, price, minPrice, 1));
         updateCartTable();
         calculateTotal();
     }
@@ -1117,9 +1493,9 @@ public class SalesPanel extends JPanel {
         for (CartItem item : cartItems) {
             cartModel.addRow(new Object[]{
                     item.productName,
-                    String.format("₦ %,.2f", item.unitPrice),
+                    item.unitPrice,
                     item.quantity,
-                    String.format("₦ %,.2f", item.total),
+                    item.total,
                     "Remove"
             });
         }
@@ -1130,7 +1506,6 @@ public class SalesPanel extends JPanel {
         totalLabel.setText(String.format("Total: ₦ %,.2f", total));
     }
 
-    // >>> New fixed method (was missing)
     private double calculateTotalAmount() {
         return cartItems.stream().mapToDouble(i -> i.total).sum();
     }
@@ -1179,6 +1554,20 @@ public class SalesPanel extends JPanel {
 
     private void showError(String message) {
         SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(this, message, "Error", JOptionPane.ERROR_MESSAGE));
+    }
+
+    private String getEmailForSale(Map<String, Object> sale) {
+        if (sale == null) return null;
+        String e = Objects.toString(sale.get("email"), "").trim();
+        if (!e.isEmpty()) return e;
+        e = Objects.toString(sale.get("customerEmail"), "").trim();
+        if (!e.isEmpty()) return e;
+        if (sale.containsKey("customer") && sale.get("customer") instanceof Map) {
+            Map<String, Object> c = (Map<String, Object>) sale.get("customer");
+            e = Objects.toString(c.get("email"), "").trim();
+            if (!e.isEmpty()) return e;
+        }
+        return null;
     }
 
     // ---------- Table button renderer/editor ----------

@@ -4,6 +4,7 @@ import olkalouwaithakaautospares.co.ke.win.ui.auth.AuthPanel;
 import olkalouwaithakaautospares.co.ke.win.ui.dashboard.customer.CustomerPanel;
 import olkalouwaithakaautospares.co.ke.win.ui.dashboard.home.DashboardHome;
 import olkalouwaithakaautospares.co.ke.win.ui.dashboard.master.InventoryPanel;
+import olkalouwaithakaautospares.co.ke.win.ui.dashboard.reports.EmailReportsPanel;
 import olkalouwaithakaautospares.co.ke.win.ui.dashboard.reports.ReportingPanel;
 import olkalouwaithakaautospares.co.ke.win.ui.dashboard.returns.ReturnApprovalPanel;
 import olkalouwaithakaautospares.co.ke.win.ui.dashboard.returns.ReturnPanel;
@@ -58,7 +59,7 @@ public class MainDashboard extends JFrame {
          contentPanel.add(new ReturnPanel(), "RETURNS");
         contentPanel.add(new ReturnApprovalPanel(), "RETURNS-APPROVAL");
         contentPanel.add(new ReportingPanel(), "REPORTS");
-      //  contentPanel.add(new SettingsPanel(), "SETTINGS");
+        contentPanel.add(new EmailReportsPanel(), "EMAIL-REPORTS");
 
         add(contentPanel, BorderLayout.CENTER);
 
@@ -102,13 +103,13 @@ public class MainDashboard extends JFrame {
 
         if (isAdmin) {
             navItems = new String[]{"Dashboard", "Sales", "Customers", "Inventory",
-                    "Returns", "Reports","Returns-approval", "Settings", "Logout"};
+                    "Returns", "Reports","Returns-approval", "Email-Reports","Logout"};
             panelNames = new String[]{"HOME", "SALES", "CUSTOMERS", "INVENTORY",
-                    "RETURNS", "REPORTS","RETURNS-APPROVAL", "SETTINGS", "LOGOUT"};
+                    "RETURNS", "REPORTS","RETURNS-APPROVAL", "EMAIL-REPORTS", "LOGOUT"};
         } else {
             // Cashier only sees Sales, Customers, Returns
-            navItems = new String[]{"Dashboard", "Sales", "Customers", "Returns", "Logout"};
-            panelNames = new String[]{"HOME", "SALES", "CUSTOMERS", "RETURNS", "LOGOUT"};
+            navItems = new String[]{"Dashboard", "Sales", "Customers", "Returns", "Email-Reports", "Logout"};
+            panelNames = new String[]{"HOME", "SALES", "CUSTOMERS", "RETURNS","EMAIL-REPORTS", "LOGOUT"};
         }
 
         for (int i = 0; i < navItems.length; i++) {

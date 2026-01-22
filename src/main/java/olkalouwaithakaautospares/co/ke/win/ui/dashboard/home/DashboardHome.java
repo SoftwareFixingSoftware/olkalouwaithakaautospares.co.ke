@@ -6,7 +6,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.core.type.TypeReference;
 
 import javax.swing.*;
-import javax.swing.Timer;
 import java.awt.*;
 import java.text.DecimalFormat;
 import java.time.LocalDate;
@@ -21,7 +20,6 @@ public class DashboardHome extends JPanel {
 
     // Stat card labels
     private JLabel totalSalesLabel;
-    private JLabel todayRevenueLabel;
     private JLabel newCustomersLabel;
     private JLabel pendingReturnsLabel;
     private JLabel lowStockLabel;
@@ -29,7 +27,6 @@ public class DashboardHome extends JPanel {
 
     // Description labels
     private JLabel totalSalesDesc;
-    private JLabel todayRevenueDesc;
     private JLabel newCustomersDesc;
     private JLabel pendingReturnsDesc;
     private JLabel lowStockDesc;
@@ -53,12 +50,10 @@ public class DashboardHome extends JPanel {
         this.mapper = client.getMapper();
         this.session = UserSessionManager.getInstance();
         initUI();
-        loadDashboardData();
 
-        // Auto-refresh every 30 seconds
-        Timer timer = new Timer(30000, e -> loadDashboardData());
-        timer.setRepeats(true);
-        timer.start();
+        // Load once when the dashboard is first displayed (no periodic auto-refresh).
+        // Subsequent refreshes happen only when the user clicks the Refresh button.
+        SwingUtilities.invokeLater(this::loadDashboardData);
     }
 
     // ---------- UI Initialization ----------
@@ -73,7 +68,6 @@ public class DashboardHome extends JPanel {
         // Stats cards
         JPanel statsPanel = createStatsPanel();
         add(statsPanel, BorderLayout.CENTER);
-
     }
 
     private JPanel createHeader() {
@@ -81,7 +75,7 @@ public class DashboardHome extends JPanel {
         header.setBackground(Color.WHITE);
         header.setBorder(BorderFactory.createEmptyBorder(20, 30, 20, 30));
 
-        JLabel title = new JLabel("Dashboard Overview");
+        JLabel title = new JLabel("Dashboard Overview    ");
         title.setFont(new Font("Segoe UI", Font.BOLD, 24));
         title.setForeground(new Color(30, 33, 57));
 
@@ -121,10 +115,6 @@ public class DashboardHome extends JPanel {
         totalSalesLabel.setFont(new Font("Segoe UI", Font.BOLD, 28));
         totalSalesDesc = new JLabel("Loading...");
 
-        todayRevenueLabel = new JLabel("₦ 0.00");
-        todayRevenueLabel.setFont(new Font("Segoe UI", Font.BOLD, 28));
-        todayRevenueDesc = new JLabel("Loading...");
-
         newCustomersLabel = new JLabel("0");
         newCustomersLabel.setFont(new Font("Segoe UI", Font.BOLD, 28));
         newCustomersDesc = new JLabel("Loading...");
@@ -141,33 +131,24 @@ public class DashboardHome extends JPanel {
         creditSalesLabel.setFont(new Font("Segoe UI", Font.BOLD, 28));
         creditSalesDesc = new JLabel("Loading...");
 
+        // Layout: 3 columns x 2 rows (last cell unused)
         gbc.gridx = 0; gbc.gridy = 0;
-        panel.add(createStatCard("Total Sales", totalSalesLabel, totalSalesDesc,
-                new Color(76, 175, 80)), gbc);
+        panel.add(createStatCard("Total Sales", totalSalesLabel, totalSalesDesc, new Color(76, 175, 80)), gbc);
 
-        gbc.gridx = 1;
-        panel.add(createStatCard("Today's Revenue", todayRevenueLabel, todayRevenueDesc,
-                new Color(33, 150, 243)), gbc);
+        gbc.gridx = 1; gbc.gridy = 0;
+        panel.add(createStatCard("New Customers", newCustomersLabel, newCustomersDesc, new Color(156, 39, 176)), gbc);
 
-        gbc.gridx = 2;
-        panel.add(createStatCard("New Customers", newCustomersLabel, newCustomersDesc,
-                new Color(156, 39, 176)), gbc);
+        gbc.gridx = 2; gbc.gridy = 0;
+        panel.add(createStatCard("Pending Returns", pendingReturnsLabel, pendingReturnsDesc, new Color(255, 152, 0)), gbc);
 
         gbc.gridx = 0; gbc.gridy = 1;
-        panel.add(createStatCard("Pending Returns", pendingReturnsLabel, pendingReturnsDesc,
-                new Color(255, 152, 0)), gbc);
+        panel.add(createStatCard("Low Stock Items", lowStockLabel, lowStockDesc, new Color(244, 67, 54)), gbc);
 
-        gbc.gridx = 1;
-        panel.add(createStatCard("Low Stock Items", lowStockLabel, lowStockDesc,
-                new Color(244, 67, 54)), gbc);
-
-        gbc.gridx = 2;
-        panel.add(createStatCard("Credit Sales", creditSalesLabel, creditSalesDesc,
-                new Color(96, 125, 139)), gbc);
+        gbc.gridx = 1; gbc.gridy = 1;
+        panel.add(createStatCard("Credit Sales", creditSalesLabel, creditSalesDesc, new Color(96, 125, 139)), gbc);
 
         return panel;
     }
-
 
     private void styleButton(JButton button, Color color) {
         button.setFont(new Font("Segoe UI", Font.BOLD, 14));
@@ -181,6 +162,9 @@ public class DashboardHome extends JPanel {
 
     // ---------- Data Loading Methods (Reports-style) ----------
     private void loadDashboardData() {
+        // prevent double-click starting duplicate loads
+        if (!refreshBtn.isEnabled()) return;
+
         refreshBtn.setEnabled(false);
         refreshBtn.setText("Loading...");
 
@@ -193,6 +177,28 @@ public class DashboardHome extends JPanel {
                 try {
                     loadAllData();
                     calculateStats();
+
+                    // Attempt to load the daily report for today (same source used in ReportingPanel)
+                    String today = LocalDate.now().format(dateFormatter);
+                    try {
+                        Map<String, Object> dailyReport = loadDailyReport(today);
+                        if (dailyReport != null && !dailyReport.isEmpty()) {
+                            // If report provides totalSales we show it as authoritative for the day's total
+                            if (dailyReport.containsKey("totalSales") && dailyReport.get("totalSales") != null) {
+                                stats.totalSales = safeDouble(dailyReport.get("totalSales"), stats.totalSales);
+                            }
+                            // If report provides credit totals, keep override behavior
+                            if (dailyReport.containsKey("creditSales") && dailyReport.get("creditSales") != null) {
+                                stats.creditSales = safeDouble(dailyReport.get("creditSales"), stats.creditSales);
+                            }
+                            if (dailyReport.containsKey("creditTransactions") && dailyReport.get("creditTransactions") != null) {
+                                stats.creditTransactions = safeInteger(dailyReport.get("creditTransactions"), stats.creditTransactions);
+                            }
+                        }
+                    } catch (Exception ex) {
+                        // keep computed values if report call fails
+                        ex.printStackTrace();
+                    }
                 } catch (Exception e) {
                     error = e;
                     e.printStackTrace();
@@ -204,7 +210,7 @@ public class DashboardHome extends JPanel {
             protected void done() {
                 SwingUtilities.invokeLater(() -> {
                     refreshBtn.setEnabled(true);
-                    refreshBtn.setText("⟳ Refresh");
+                    refreshBtn.setText("Refresh");
 
                     if (error != null) {
                         showError("Failed to load dashboard data: " + error.getMessage());
@@ -223,7 +229,7 @@ public class DashboardHome extends JPanel {
                 stockBatchesData.clear();
                 customersData.clear();
 
-                // Load all data in sequence (could be parallelized if needed)
+                // Load all data in sequence
                 salesData.addAll(loadSalesData());
                 returnsData.addAll(loadReturnsData());
                 productsData.addAll(loadProductsData());
@@ -251,13 +257,15 @@ public class DashboardHome extends JPanel {
                 return loadDataList("/api/secure/customers");
             }
 
+            @SuppressWarnings("unchecked")
             private List<Map<String, Object>> loadDataList(String endpoint) throws Exception {
                 String response = client.get(endpoint);
                 if (response != null && !response.trim().isEmpty()) {
                     try {
+                        // try parse as direct list
                         return mapper.readValue(response, new TypeReference<List<Map<String, Object>>>() {});
                     } catch (Exception ex) {
-                        // Try to parse as wrapped response (like Reports does)
+                        // parse wrapped { "data": [...] } response
                         Map<String, Object> parsed = mapper.readValue(response, new TypeReference<Map<String, Object>>() {});
                         if (parsed != null && parsed.containsKey("data") && parsed.get("data") instanceof List) {
                             return (List<Map<String, Object>>) parsed.get("data");
@@ -274,7 +282,12 @@ public class DashboardHome extends JPanel {
                 // Reset stats
                 stats = new DashboardStats();
 
-                // Calculate sales statistics
+                // Define payment statuses that should be treated as "credit/pending"
+                Set<String> creditStatuses = new HashSet<>(Arrays.asList(
+                        "CREDIT", "PENDING", "PARTIAL", "PARTIALLY_PAID", "OWING"
+                ));
+
+                // Calculate sales statistics (keeps existing behavior but totalSales may be overridden by report)
                 for (Map<String, Object> sale : salesData) {
                     Double total = safeDouble(sale.get("totalAmount"));
                     if (total == null) continue;
@@ -282,15 +295,17 @@ public class DashboardHome extends JPanel {
                     stats.totalSales += total;
 
                     String saleDate = safeString(sale.get("saleDate"));
-                    if (saleDate != null && saleDate.contains(today)) {
-                        stats.todayRevenue += total;
-                        stats.todaySalesCount++;
-                    }
-
                     String paymentStatus = safeString(sale.get("paymentStatus"));
-                    if ("CREDIT".equalsIgnoreCase(paymentStatus)) {
-                        stats.creditSales += total;
-                        stats.creditTransactions++;
+
+                    // If the sale happened today, add to today's counters (note: Today revenue card removed)
+                    if (saleDate != null && saleDate.contains(today)) {
+                        stats.todaySalesCount++;
+
+                        // If today's sale is a credit/pending, include in today's credit totals
+                        if (paymentStatus != null && creditStatuses.contains(paymentStatus.toUpperCase())) {
+                            stats.creditSales += total;
+                            stats.creditTransactions++;
+                        }
                     }
                 }
 
@@ -321,19 +336,9 @@ public class DashboardHome extends JPanel {
                     }
                 }
 
-                // --- Override credit totals using the reports API for today's date (authoritative) ---
-                try {
-                    Map<String, Object> dailyReport = loadDailyReport(today);
-                    if (dailyReport != null && !dailyReport.isEmpty()) {
-                        stats.creditSales = safeDouble(dailyReport.get("creditSales"));
-                        stats.creditTransactions = safeInteger(dailyReport.get("creditTransactions"));
-                    }
-                } catch (Exception ex) {
-                    // If the API call fails, keep the local-sum values we already computed.
-                    ex.printStackTrace();
-                }
+                // NOTE: We intentionally do NOT compute today's revenue here (card removed). Credit totals
+                // will be overridden by daily reports when available (handled in doInBackground override above).
             }
-
 
             private int calculateProductStock(Integer productId) {
                 int stock = 0;
@@ -355,7 +360,6 @@ public class DashboardHome extends JPanel {
 
         // Update value labels
         totalSalesLabel.setText("₦ " + df.format(stats.totalSales));
-        todayRevenueLabel.setText("₦ " + df.format(stats.todayRevenue));
         newCustomersLabel.setText(String.valueOf(stats.newCustomers));
         pendingReturnsLabel.setText(String.valueOf(stats.pendingReturns));
         lowStockLabel.setText(String.valueOf(stats.lowStockItems));
@@ -363,7 +367,6 @@ public class DashboardHome extends JPanel {
 
         // Update description labels
         totalSalesDesc.setText(String.format("%d transactions", salesData.size()));
-        todayRevenueDesc.setText(String.format("%d sales today", stats.todaySalesCount));
         newCustomersDesc.setText(String.format("%d total customers", customersData.size()));
         pendingReturnsDesc.setText(String.format("%d total returns", returnsData.size()));
         lowStockDesc.setText(String.format("%d total products", productsData.size()));
@@ -390,7 +393,7 @@ public class DashboardHome extends JPanel {
     // ---------- Helper Classes ----------
     private static class DashboardStats {
         double totalSales = 0.0;
-        double todayRevenue = 0.0;
+        double todayRevenue = 0.0; // kept for compatibility but not displayed
         double creditSales = 0.0;
         int newCustomers = 0;
         int pendingReturns = 0;
@@ -416,9 +419,6 @@ public class DashboardHome extends JPanel {
         titleLabel.setForeground(new Color(80, 80, 80));
         titleLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-
-
-
         // Top border accent
         JPanel accent = new JPanel();
         accent.setBackground(color);
@@ -441,12 +441,6 @@ public class DashboardHome extends JPanel {
     private void showError(String message) {
         SwingUtilities.invokeLater(() ->
                 JOptionPane.showMessageDialog(this, message, "Error", JOptionPane.ERROR_MESSAGE)
-        );
-    }
-
-    private void showMessage(String message) {
-        SwingUtilities.invokeLater(() ->
-                JOptionPane.showMessageDialog(this, message, "Info", JOptionPane.INFORMATION_MESSAGE)
         );
     }
 
@@ -488,6 +482,7 @@ public class DashboardHome extends JPanel {
      * Loads a single-day report from the Reports API and returns the map.
      * Supports both direct object response and wrapped { "data": { ... } } responses.
      */
+    @SuppressWarnings("unchecked")
     private Map<String, Object> loadDailyReport(String date) throws Exception {
         String resp = client.get("/api/secure/reports/daily?date=" + date);
         if (resp == null || resp.trim().isEmpty()) return Collections.emptyMap();
@@ -506,7 +501,7 @@ public class DashboardHome extends JPanel {
             // Otherwise assume parsed itself is the report
             return parsed;
         } catch (Exception ex) {
-            // fallback: try to use client's parsing helper if available (keeps parity with Reports panel)
+            // fallback: try to use client's parsing helper if available
             try {
                 Map<String, Object> alt = client.parseResponse(resp);
                 if (alt != null && alt.containsKey("data") && alt.get("data") instanceof Map) {
@@ -519,5 +514,4 @@ public class DashboardHome extends JPanel {
             throw ex;
         }
     }
-
 }

@@ -1,4 +1,3 @@
-
 package olkalouwaithakaautospares.co.ke.win.ui.dashboard.master;
 
 import olkalouwaithakaautospares.co.ke.win.utils.BaseClient;
@@ -13,6 +12,7 @@ import java.awt.*;
 import java.text.SimpleDateFormat;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.*;
 import java.util.List;
 
@@ -744,7 +744,8 @@ public class InventoryPanel extends JPanel {
                 // Calculate stock (sum from stock batches)
                 int totalStock = 0;
                 for (Map<String, Object> batch : stockBatchesList) {
-                    if (safeInteger(batch.get("productId")).equals(id)) {
+                    Integer batchProdId = safeInteger(batch.get("productId"));
+                    if (batchProdId != null && id != null && batchProdId.equals(id)) {
                         totalStock += safeInteger(batch.get("quantityRemaining"), 0);
                     }
                 }
@@ -1097,9 +1098,10 @@ public class InventoryPanel extends JPanel {
         batchData.put("quantityReceived", quantity);
         batchData.put("quantityRemaining", quantity); // Initially same as received
 
-        // Use DB-friendly timestamp format: "yyyy-MM-dd HH:mm:ss.SSS"
-        DateTimeFormatter dbFmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
-        batchData.put("receivedDate", LocalDateTime.now().format(dbFmt));
+        // Send timestamp in ISO format with 'T' so server LocalDateTime deserializes correctly.
+        // Example: 2026-01-21T18:50:55.157
+        DateTimeFormatter isoFmt = DateTimeFormatter.ISO_LOCAL_DATE_TIME;
+        batchData.put("receivedDate", LocalDateTime.now().format(isoFmt));
 
         if (!expiry.isEmpty()) {
             batchData.put("expiryDate", expiry);
@@ -1280,16 +1282,35 @@ public class InventoryPanel extends JPanel {
         }
     }
 
-    // utility method for DB timestamps (expects: yyyy-MM-dd HH:mm:ss.SSS)
+    // utility method for DB timestamps - robust parsing for both ISO and space-separated formats
     private String formatDate(Object value) {
         if (value == null) return "";
+        String s = value.toString();
+        // Try ISO first (yyyy-MM-dd'T'HH:mm:ss[.SSS])
+        DateTimeFormatter uiFmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+        try {
+            LocalDateTime ldt = LocalDateTime.parse(s, DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+            return ldt.format(uiFmt);
+        } catch (DateTimeParseException ignored) {
+        }
+
+        // Try space-separated with milliseconds
         try {
             DateTimeFormatter dbFmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
-            DateTimeFormatter uiFmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
-            LocalDateTime ldt = LocalDateTime.parse(value.toString(), dbFmt);
+            LocalDateTime ldt = LocalDateTime.parse(s, dbFmt);
             return ldt.format(uiFmt);
-        } catch (Exception e) {
-            return value.toString();
+        } catch (DateTimeParseException ignored) {
         }
+
+        // Try space-separated without millis
+        try {
+            DateTimeFormatter dbFmt2 = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+            LocalDateTime ldt = LocalDateTime.parse(s, dbFmt2);
+            return ldt.format(uiFmt);
+        } catch (DateTimeParseException ignored) {
+        }
+
+        // fallback - return raw string
+        return s;
     }
 }
