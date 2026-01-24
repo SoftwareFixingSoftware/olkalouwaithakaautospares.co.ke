@@ -1924,7 +1924,6 @@ public class InventoryPanel extends JPanel {
         };
         worker.execute();
     }
-
     private void setEditMode(boolean edit) {
         isEditMode = edit;
 
@@ -1932,19 +1931,104 @@ public class InventoryPanel extends JPanel {
             addProdBtn.setVisible(false);
             updateProdBtn.setVisible(true);
 
-            // Update form title
-            JPanel formPanel = (JPanel) getComponent(0); // Get the main panel
-            JTabbedPane tabbedPane = (JTabbedPane) formPanel.getComponent(0);
-            Component productsTab = tabbedPane.getComponentAt(3); // Products tab is at index 3
-            if (productsTab instanceof JPanel) {
-                JPanel productsPanel = (JPanel) productsTab;
-                JSplitPane splitPane = (JSplitPane) productsPanel.getComponent(0);
-                JPanel bottomPanel = (JPanel) splitPane.getRightComponent();
-                bottomPanel.setBorder(BorderFactory.createTitledBorder("Edit Product (ID: " + selectedProductId + ")"));
+            // Find the form panel directly
+            for (Component comp : getComponents()) {
+                if (comp instanceof JTabbedPane) {
+                    JTabbedPane tabbedPane = (JTabbedPane) comp;
+                    Component productsTab = tabbedPane.getComponentAt(3); // Products tab
+                    if (productsTab instanceof JPanel) {
+                        updateProductFormTitle((JPanel) productsTab, "Edit Product (ID: " + selectedProductId + ")");
+                    }
+                    break;
+                }
             }
         } else {
             addProdBtn.setVisible(true);
             updateProdBtn.setVisible(false);
+
+            // Find the form panel directly
+            for (Component comp : getComponents()) {
+                if (comp instanceof JTabbedPane) {
+                    JTabbedPane tabbedPane = (JTabbedPane) comp;
+                    Component productsTab = tabbedPane.getComponentAt(3); // Products tab
+                    if (productsTab instanceof JPanel) {
+                        updateProductFormTitle((JPanel) productsTab, "Product Management");
+                    }
+                    break;
+                }
+            }
+        }
+    }
+
+    private void updateProductFormTitle(JPanel productsPanel, String newTitle) {
+        // Find the split pane
+        for (Component comp : productsPanel.getComponents()) {
+            if (comp instanceof JSplitPane) {
+                JSplitPane splitPane = (JSplitPane) comp;
+                Component rightComponent = splitPane.getRightComponent();
+                if (rightComponent instanceof JPanel) {
+                    JPanel formPanel = (JPanel) rightComponent;
+                    formPanel.setBorder(BorderFactory.createTitledBorder(newTitle));
+                    formPanel.revalidate();
+                    formPanel.repaint();
+                }
+                break;
+            }
+        }
+    }
+
+    private void setBatchEditMode(boolean edit) {
+        isEditBatchMode = edit;
+
+        if (edit) {
+            addBatchBtn.setVisible(false);
+            updateBatchBtn.setVisible(true);
+            cancelEditBatchBtn.setVisible(true);
+
+            // Find the form panel directly
+            for (Component comp : getComponents()) {
+                if (comp instanceof JTabbedPane) {
+                    JTabbedPane tabbedPane = (JTabbedPane) comp;
+                    Component batchesTab = tabbedPane.getComponentAt(4); // Batches tab
+                    if (batchesTab instanceof JPanel) {
+                        updateBatchFormTitle((JPanel) batchesTab, "Edit Stock Batch (ID: " + selectedStockBatchId + ")");
+                    }
+                    break;
+                }
+            }
+        } else {
+            addBatchBtn.setVisible(true);
+            updateBatchBtn.setVisible(false);
+            cancelEditBatchBtn.setVisible(false);
+
+            // Find the form panel directly
+            for (Component comp : getComponents()) {
+                if (comp instanceof JTabbedPane) {
+                    JTabbedPane tabbedPane = (JTabbedPane) comp;
+                    Component batchesTab = tabbedPane.getComponentAt(4); // Batches tab
+                    if (batchesTab instanceof JPanel) {
+                        updateBatchFormTitle((JPanel) batchesTab, "Add New Stock Batch");
+                    }
+                    break;
+                }
+            }
+        }
+    }
+
+    private void updateBatchFormTitle(JPanel batchesPanel, String newTitle) {
+        // Find the split pane
+        for (Component comp : batchesPanel.getComponents()) {
+            if (comp instanceof JSplitPane) {
+                JSplitPane splitPane = (JSplitPane) comp;
+                Component rightComponent = splitPane.getRightComponent();
+                if (rightComponent instanceof JPanel) {
+                    JPanel formPanel = (JPanel) rightComponent;
+                    formPanel.setBorder(BorderFactory.createTitledBorder(newTitle));
+                    formPanel.revalidate();
+                    formPanel.repaint();
+                }
+                break;
+            }
         }
     }
 
@@ -2352,31 +2436,6 @@ public class InventoryPanel extends JPanel {
             }
         };
         worker.execute();
-    }
-
-    private void setBatchEditMode(boolean edit) {
-        isEditBatchMode = edit;
-
-        if (edit) {
-            addBatchBtn.setVisible(false);
-            updateBatchBtn.setVisible(true);
-            cancelEditBatchBtn.setVisible(true);
-
-            // Update form title
-            JPanel formPanel = (JPanel) getComponent(0); // Get the main panel
-            JTabbedPane tabbedPane = (JTabbedPane) formPanel.getComponent(0);
-            Component batchesTab = tabbedPane.getComponentAt(4); // Batches tab is at index 4
-            if (batchesTab instanceof JPanel) {
-                JPanel batchesPanel = (JPanel) batchesTab;
-                JSplitPane splitPane = (JSplitPane) batchesPanel.getComponent(0);
-                JPanel bottomPanel = (JPanel) splitPane.getRightComponent();
-                bottomPanel.setBorder(BorderFactory.createTitledBorder("Edit Stock Batch (ID: " + selectedStockBatchId + ")"));
-            }
-        } else {
-            addBatchBtn.setVisible(true);
-            updateBatchBtn.setVisible(false);
-            cancelEditBatchBtn.setVisible(false);
-        }
     }
 
     private void cancelBatchEdit() {

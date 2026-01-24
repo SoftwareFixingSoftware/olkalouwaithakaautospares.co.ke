@@ -35,7 +35,7 @@ public class AuthPanel extends JPanel {
     private final JButton resetOtpButton = new JButton("Send OTP");
     private final JButton resetPasswordButton = new JButton("Reset Password");
     private Timer otpTimer;
-    private int otpTimerSeconds = 300; // 5 minutes
+    private int otpTimerSeconds = 600; // 10 minutes
     private String currentResetEmail;
 
     // Input fields - signup
@@ -112,9 +112,8 @@ public class AuthPanel extends JPanel {
         otpTimer.setRepeats(true);
     }
 
-    // ---------------------------
     // Reset Password Panel
-    // ---------------------------
+
     private JPanel createResetPasswordPanel() {
         JPanel panel = new JPanel(new GridBagLayout());
         panel.setOpaque(true);
@@ -225,23 +224,11 @@ public class AuthPanel extends JPanel {
         panel.add(resetPasswordButton, gbc);
 
         // Add document listeners for real-time validation
-        resetOtpField.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
-            @Override public void insertUpdate(javax.swing.event.DocumentEvent e) { checkResetFormValidity(); }
-            @Override public void removeUpdate(javax.swing.event.DocumentEvent e) { checkResetFormValidity(); }
-            @Override public void changedUpdate(javax.swing.event.DocumentEvent e) { checkResetFormValidity(); }
-        });
+        RealTimeDocumentValidation(resetOtpField);
 
-        resetNewPasswordField.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
-            @Override public void insertUpdate(javax.swing.event.DocumentEvent e) { checkResetFormValidity(); }
-            @Override public void removeUpdate(javax.swing.event.DocumentEvent e) { checkResetFormValidity(); }
-            @Override public void changedUpdate(javax.swing.event.DocumentEvent e) { checkResetFormValidity(); }
-        });
+        RealTimeDocumentValidation(resetNewPasswordField);
 
-        resetConfirmPasswordField.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
-            @Override public void insertUpdate(javax.swing.event.DocumentEvent e) { checkResetFormValidity(); }
-            @Override public void removeUpdate(javax.swing.event.DocumentEvent e) { checkResetFormValidity(); }
-            @Override public void changedUpdate(javax.swing.event.DocumentEvent e) { checkResetFormValidity(); }
-        });
+        RealTimeDocumentValidation(resetConfirmPasswordField);
 
         // Enter key support
         addEnterKeySupport(resetEmailField, this::sendResetOtp);
@@ -258,7 +245,19 @@ public class AuthPanel extends JPanel {
         return panel;
     }
 
+    private void RealTimeDocumentValidation(JTextField resetOtpField) {
+        resetOtpField.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+            @Override public void insertUpdate(javax.swing.event.DocumentEvent e) { checkResetFormValidity(); }
+            @Override public void removeUpdate(javax.swing.event.DocumentEvent e) { checkResetFormValidity(); }
+            @Override public void changedUpdate(javax.swing.event.DocumentEvent e) { checkResetFormValidity(); }
+        });
+    }
+
     private JPanel createResetInputField(String label, JTextField textField, String placeholder) {
+        return getPanel(label, textField, placeholder);
+    }
+
+    private JPanel getPanel(String label, JTextField textField, String placeholder) {
         JPanel panel = new JPanel(new BorderLayout(0, 6));
         panel.setOpaque(false);
 
@@ -306,49 +305,11 @@ public class AuthPanel extends JPanel {
     }
 
     private JPanel createResetPasswordField(String label, JPasswordField passwordField) {
-        JPanel panel = new JPanel(new BorderLayout(0, 6));
-        panel.setOpaque(false);
-
-        JLabel lbl = new JLabel(label);
-        lbl.setFont(new Font("Segoe UI", Font.PLAIN, 12));
-        lbl.setForeground(new Color(200, 200, 200));
-        panel.add(lbl, BorderLayout.NORTH);
-
-        RoundedInput input = new RoundedInput(passwordField);
-        input.setPreferredSize(new Dimension(380, 44));
-
-        passwordField.setOpaque(false);
-        passwordField.setBorder(BorderFactory.createEmptyBorder());
-        passwordField.setFont(new Font("Segoe UI", Font.PLAIN, 14));
-        passwordField.setForeground(Color.WHITE);
-        passwordField.setCaretColor(new Color(12, 97, 103));
-        passwordField.setEchoChar('•');
-        passwordField.setToolTipText(label);
-
-        JToggleButton toggle = new JToggleButton();
-        toggle.setPreferredSize(new Dimension(30, 30));
-        toggle.setOpaque(false);
-        toggle.setBorder(BorderFactory.createEmptyBorder());
-        toggle.setContentAreaFilled(false);
-        toggle.setIcon(new ImageIcon(createEyeIcon(false)));
-        toggle.setSelectedIcon(new ImageIcon(createEyeIcon(true)));
-
-        toggle.addActionListener(e -> {
-            if (toggle.isSelected()) passwordField.setEchoChar((char) 0);
-            else passwordField.setEchoChar('•');
-            input.repaint();
-        });
-
-        input.add(passwordField, BorderLayout.CENTER);
-        input.add(toggle, BorderLayout.EAST);
-        panel.add(input, BorderLayout.CENTER);
-        return panel;
+        return getPanel(label, passwordField);
     }
 
-    // ---------------------------
-    // Reset Password Methods
-    // ---------------------------
-    private void sendResetOtp() {
+     // Reset Password Methods
+     private void sendResetOtp() {
         String email = resetEmailField.getText().trim();
 
         if (email.isEmpty() || email.equals("you@example.com")) {
@@ -387,7 +348,7 @@ public class AuthPanel extends JPanel {
                     return client.getResponseMessage(response);
 
                 } catch (Exception ex) {
-                    error = "Network error: " + ex.getMessage();
+                    error = "Network error";
                     return null;
                 }
             }
@@ -422,8 +383,8 @@ public class AuthPanel extends JPanel {
                         SwingUtilities.invokeLater(() -> resetOtpField.requestFocusInWindow());
                     }
                 } catch (Exception ex) {
-                    resetOtpStatusLabel.setText("An error occurred: " + ex.getMessage());
-                    showToast("An error occurred: " + ex.getMessage(), true);
+                    resetOtpStatusLabel.setText("An error occurred");
+                    showToast("An error occurred", true);
                     resetOtpButton.setEnabled(true);
                 }
             }
@@ -528,7 +489,7 @@ public class AuthPanel extends JPanel {
                     return client.getResponseMessage(response);
 
                 } catch (Exception ex) {
-                    error = "Network error: " + ex.getMessage();
+                    error = "Network error";
                     return null;
                 }
             }
@@ -561,9 +522,9 @@ public class AuthPanel extends JPanel {
                         switchTimer.start();
                     }
                 } catch (Exception ex) {
-                    resetOtpStatusLabel.setText("An error occurred: " + ex.getMessage());
+                    resetOtpStatusLabel.setText("An error occurred");
                     resetOtpStatusLabel.setForeground(new Color(255, 100, 100));
-                    showToast("An error occurred: " + ex.getMessage(), true);
+                    showToast("An error occurred", true);
                 }
             }
         };
@@ -590,10 +551,8 @@ public class AuthPanel extends JPanel {
         }
     }
 
-    // ---------------------------
-    // UI Creation Methods
-    // ---------------------------
-    private JPanel createRightAuthContainer() {
+     // UI Creation Methods
+     private JPanel createRightAuthContainer() {
         JPanel outer = new JPanel(new BorderLayout());
         outer.setBackground(Color.black);
         outer.setOpaque(true);
@@ -618,30 +577,7 @@ public class AuthPanel extends JPanel {
     }
 
     private JPanel createHeroPanel() {
-        JPanel panel = new JPanel(new GridBagLayout()) {
-            @Override
-            protected void paintComponent(Graphics g) {
-                super.paintComponent(g);
-                Graphics2D g2d = (Graphics2D) g.create();
-                g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                GradientPaint gp = new GradientPaint(0, 0, new Color(6, 84, 92), getWidth(), getHeight(), new Color(4, 58, 72));
-                g2d.setPaint(gp);
-                g2d.fillRect(0, 0, getWidth(), getHeight());
-
-                // Subtle dot pattern
-                g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.04f));
-                g2d.setColor(Color.WHITE);
-                for (int x = 0; x < getWidth(); x += 36) {
-                    for (int y = 0; y < getHeight(); y += 36) {
-                        g2d.fillOval(x, y, 2, 2);
-                    }
-                }
-                g2d.dispose();
-            }
-        };
-        panel.setPreferredSize(new Dimension(480, 600));
-        panel.setBorder(new EmptyBorder(48, 32, 48, 32));
-        panel.setOpaque(false);
+        JPanel panel = getPanel();
 
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.gridx = 0;
@@ -731,6 +667,34 @@ public class AuthPanel extends JPanel {
         footerPanel.add(footer);
         panel.add(footerPanel, gbc);
 
+        return panel;
+    }
+
+    private JPanel getPanel() {
+        JPanel panel = new JPanel(new GridBagLayout()) {
+            @Override
+            protected void paintComponent(Graphics g) {
+                super.paintComponent(g);
+                Graphics2D g2d = (Graphics2D) g.create();
+                g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                GradientPaint gp = new GradientPaint(0, 0, new Color(6, 84, 92), getWidth(), getHeight(), new Color(4, 58, 72));
+                g2d.setPaint(gp);
+                g2d.fillRect(0, 0, getWidth(), getHeight());
+
+                // Subtle dot pattern
+                g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.04f));
+                g2d.setColor(Color.WHITE);
+                for (int x = 0; x < getWidth(); x += 36) {
+                    for (int y = 0; y < getHeight(); y += 36) {
+                        g2d.fillOval(x, y, 2, 2);
+                    }
+                }
+                g2d.dispose();
+            }
+        };
+        panel.setPreferredSize(new Dimension(480, 600));
+        panel.setBorder(new EmptyBorder(48, 32, 48, 32));
+        panel.setOpaque(false);
         return panel;
     }
 
@@ -901,10 +865,8 @@ public class AuthPanel extends JPanel {
         return panel;
     }
 
-    // ---------------------------
-    // Network Actions
-    // ---------------------------
-    private void onSignup() {
+     // Network Actions
+     private void onSignup() {
         final String fullName = signupFullNameField.getText().trim();
         final String email = signupEmailField.getText().trim();
         final String password = new String(signupPasswordField.getPassword());
@@ -964,7 +926,7 @@ public class AuthPanel extends JPanel {
                     return (Map<String, Object>) result.get("data");
 
                 } catch (Exception ex) {
-                    error = "Network error: " + ex.getMessage();
+                    error = "Network error ";
                     ex.printStackTrace();
                     return null;
                 }
@@ -984,7 +946,7 @@ public class AuthPanel extends JPanel {
                         switchToLogin();
                     }
                 } catch (Exception ex) {
-                    showToast("An error occurred: " + ex.getMessage(), true);
+                    showToast("An error occurred", true);
                 }
             }
         };
@@ -1033,7 +995,7 @@ public class AuthPanel extends JPanel {
                     return (Map<String, Object>) result.get("data");
 
                 } catch (Exception ex) {
-                    error = "Network error: " + ex.getMessage();
+                    error = "Network error ";
                     ex.printStackTrace();
                     return null;
                 }
@@ -1055,7 +1017,7 @@ public class AuthPanel extends JPanel {
                     }
                 } catch (Exception ex) {
                     ex.printStackTrace();
-                    showToast("An error occurred: " + ex.getMessage(), true);
+                    showToast("An error occurred" , true);
                 }
             }
         };
@@ -1102,7 +1064,7 @@ public class AuthPanel extends JPanel {
                     return userData;
 
                 } catch (Exception ex) {
-                    error = "Failed to fetch user: " + ex.getMessage();
+                    error = "Failed to fetch user";
                     ex.printStackTrace();
                     return null;
                 }
@@ -1155,7 +1117,7 @@ public class AuthPanel extends JPanel {
                     }
                 } catch (Exception ex) {
                     ex.printStackTrace();
-                    showToast("An error occurred: " + ex.getMessage(), true);
+                    showToast("An error occurred" , true);
                     clearInvalidSession();
                 }
             }
@@ -1180,57 +1142,16 @@ public class AuthPanel extends JPanel {
         worker.execute();
     }
 
-    // ---------------------------
-    // UI Helper Methods
-    // ---------------------------
-    private JPanel createModernInputField(String label, JTextField textField, String placeholder) {
-        JPanel panel = new JPanel(new BorderLayout(0, 6));
-        panel.setOpaque(false);
-
-        JLabel lbl = new JLabel(label);
-        lbl.setFont(new Font("Segoe UI", Font.PLAIN, 12));
-        lbl.setForeground(new Color(200, 200, 200));
-        panel.add(lbl, BorderLayout.NORTH);
-
-        RoundedInput input = new RoundedInput(textField);
-        input.setPreferredSize(new Dimension(380, 44));
-
-        textField.setOpaque(false);
-        textField.setBorder(BorderFactory.createEmptyBorder());
-        textField.setFont(new Font("Segoe UI", Font.PLAIN, 14));
-        textField.setCaretColor(new Color(12, 97, 103));
-
-        textField.setText(placeholder);
-        textField.setForeground(new Color(150, 150, 150));
-        textField.setToolTipText(label);
-
-        textField.addFocusListener(new FocusAdapter() {
-            @Override
-            public void focusGained(FocusEvent e) {
-                if (textField.getText().equals(placeholder)) {
-                    textField.setText("");
-                }
-                textField.setForeground(Color.WHITE);
-                input.repaint();
-            }
-            @Override
-            public void focusLost(FocusEvent e) {
-                if (textField.getText().isEmpty()) {
-                    textField.setText(placeholder);
-                    textField.setForeground(new Color(150, 150, 150));
-                } else {
-                    textField.setForeground(Color.WHITE);
-                }
-                input.repaint();
-            }
-        });
-
-        input.add(textField, BorderLayout.CENTER);
-        panel.add(input, BorderLayout.CENTER);
-        return panel;
+     // UI Helper Methods
+     private JPanel createModernInputField(String label, JTextField textField, String placeholder) {
+        return getPanel(label, textField, placeholder);
     }
 
     private JPanel createModernPasswordField(String label, JPasswordField passwordField) {
+        return getPanel(label, passwordField);
+    }
+
+    private JPanel getPanel(String label, JPasswordField passwordField) {
         JPanel panel = new JPanel(new BorderLayout(0, 6));
         panel.setOpaque(false);
 
@@ -1354,10 +1275,8 @@ public class AuthPanel extends JPanel {
         });
     }
 
-    // ---------------------------
-    // Utility Methods
-    // ---------------------------
-    private void setOverlayVisible(boolean visible) {
+     // Utility Methods
+     private void setOverlayVisible(boolean visible) {
         overlayLayer.setVisible(visible);
         overlayLayer.revalidate();
         overlayLayer.repaint();
@@ -1456,10 +1375,8 @@ public class AuthPanel extends JPanel {
         });
     }
 
-    // ---------------------------
-    // Icon Creation Methods
-    // ---------------------------
-    private Image createCheckIcon() {
+     // Icon Creation Methods
+     private Image createCheckIcon() {
         int s = 16;
         BufferedImage img = new BufferedImage(s, s, BufferedImage.TYPE_INT_ARGB);
         Graphics2D g = img.createGraphics();
@@ -1575,10 +1492,8 @@ public class AuthPanel extends JPanel {
         return root;
     }
 
-    // ---------------------------
-    // Inner Classes
-    // ---------------------------
-    private static class RoundedInput extends JPanel {
+     // Inner Classes
+     private static class RoundedInput extends JPanel {
         RoundedInput(JComponent child) {
             super(new BorderLayout());
             setOpaque(false);
