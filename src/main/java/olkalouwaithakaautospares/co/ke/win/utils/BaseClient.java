@@ -151,16 +151,6 @@ public class BaseClient {
         return responseBody;
     }
 
-    // Check if user is authenticated
-    public boolean isAuthenticated() {
-        try {
-            String response = get("/api/auth/me");
-            Map<String, Object> result = parseResponse(response);
-            return result.get("success") != null && (Boolean) result.get("success");
-        } catch (Exception e) {
-            return false;
-        }
-    }
 
     // Parse response to Map with better error handling
     public Map<String, Object> parseResponse(String jsonResponse) throws Exception {
@@ -225,28 +215,6 @@ public class BaseClient {
                 throw new Exception("Response is not a list or wrapped list: " + jsonResponse);
             } catch (Exception e2) {
                 throw new Exception("Failed to parse as list: " + e1.getMessage() + " | " + e2.getMessage(), e2);
-            }
-        }
-    }
-
-    // Get response data object
-    public Object getResponseData(String jsonResponse) throws Exception {
-        // Prefer extracting "data" from a parsed object, but also handle top-level arrays/objects
-        try {
-            Map<String, Object> response = parseResponse(jsonResponse);
-            if (response.containsKey("data")) {
-                return response.get("data");
-            } else {
-                // No data field: return the parsed object itself
-                return response;
-            }
-        } catch (Exception e) {
-            // parseResponse failed: maybe the response is a top-level list
-            try {
-                List<Map<String, Object>> list = mapper.readValue(jsonResponse, new TypeReference<List<Map<String, Object>>>() {});
-                return list;
-            } catch (Exception ex) {
-                throw new Exception("Failed to extract data: " + e.getMessage() + " | " + ex.getMessage(), ex);
             }
         }
     }

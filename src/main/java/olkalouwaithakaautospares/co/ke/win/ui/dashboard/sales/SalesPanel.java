@@ -1173,20 +1173,6 @@ public class SalesPanel extends JPanel {
         dialog.setVisible(true);
     }
 
-    private Double calculatePaidAmount(Integer saleId) {
-        double totalPaid = 0.0;
-        for (Map<String, Object> payment : recentPayments) {
-            Integer paymentSaleId = safeIntegerFromObject(payment.get("saleId"));
-            if (paymentSaleId != null && paymentSaleId.equals(saleId)) {
-                Double amount = safeDoubleFromObject(payment.get("amount"));
-                if (amount != null) {
-                    totalPaid += amount;
-                }
-            }
-        }
-        return totalPaid;
-    }
-
     // ---------- Load Categories and Brands for Search ----------
     private void loadCategoriesAndBrands() {
         SwingWorker<Void, Void> worker = new SwingWorker<>() {

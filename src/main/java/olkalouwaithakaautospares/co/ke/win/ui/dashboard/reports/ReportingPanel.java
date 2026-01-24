@@ -530,7 +530,7 @@ public class ReportingPanel extends JPanel {
             return;
         }
 
-        final String dateStr = inputDate; // ✅ final copy for inner class
+        final String dateStr = inputDate;
 
         SwingWorker<Void, Void> worker = new SwingWorker<>() {
             private Exception error = null;
@@ -625,7 +625,6 @@ public class ReportingPanel extends JPanel {
             return;
         }
 
-        // ✅ FINAL COPIES FOR SWINGWORKER
         final String fromStr = fromInput;
         final String toStr = toInput;
 

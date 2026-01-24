@@ -238,7 +238,7 @@ public class EmailReportsPanel extends JPanel {
             return;
         }
 
-        // 🔒 HARD GUARANTEE: "Today" always means today
+        //  HARD GUARANTEE: "Today" always means today
         if ("CUSTOM".equals(reportType)) {
             fromField.setText(today.format(dateFormatter));
             toField.setText(today.format(dateFormatter));

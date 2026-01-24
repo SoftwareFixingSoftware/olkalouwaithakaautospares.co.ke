@@ -642,16 +642,7 @@ public class CustomerPanel extends JPanel {
         worker.execute();
     }
 
-    private Map<String, Object> createEmptyAnalytics(String dateStr) {
-        Map<String, Object> m = new HashMap<>();
-        m.put("analyticsDate", dateStr);
-        m.put("totalCustomers", 0);
-        m.put("newCustomers", 0);
-        m.put("repeatCustomers", 0);
-        m.put("creditCustomers", 0);
-        m.put("createdAt", LocalDate.now().toString());
-        return m;
-    }
+
 
     private void loadAnalyticsForRange() {
         final String fromStr = fromDateField.getText().trim();
