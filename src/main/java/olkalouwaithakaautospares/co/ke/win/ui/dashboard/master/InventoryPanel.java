@@ -6,6 +6,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.core.type.TypeReference;
 
 import javax.swing.*;
+import javax.swing.border.Border;
+import javax.swing.border.TitledBorder;
 import javax.swing.table.DefaultTableModel;
 import javax.swing.table.DefaultTableCellRenderer;
 import java.awt.*;
@@ -106,6 +108,10 @@ public class InventoryPanel extends JPanel {
     private JButton cancelEditBatchBtn;
     private Integer selectedStockBatchId = null;
     private boolean isEditBatchMode = false;
+
+    // Store references to form panels
+    private JPanel productFormPanel;
+    private JPanel batchFormPanel;
 
     public InventoryPanel() {
         this.client = BaseClient.getInstance();
@@ -540,11 +546,11 @@ public class InventoryPanel extends JPanel {
         tablePanel.add(tableHeaderPanel, BorderLayout.NORTH);
         tablePanel.add(scrollPane, BorderLayout.CENTER);
 
-        // Form panel
-        JPanel formPanel = new JPanel(new GridBagLayout());
-        formPanel.setBorder(BorderFactory.createTitledBorder("Product Management"));
-        formPanel.setBackground(Color.WHITE);
-        formPanel.setPreferredSize(new Dimension(1100, 650));
+        // Form panel - store reference
+        productFormPanel = new JPanel(new GridBagLayout());
+        productFormPanel.setBorder(BorderFactory.createTitledBorder("Product Management"));
+        productFormPanel.setBackground(Color.WHITE);
+        productFormPanel.setPreferredSize(new Dimension(1100, 650));
 
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.insets = new Insets(8, 8, 8, 8);
@@ -555,7 +561,7 @@ public class InventoryPanel extends JPanel {
         gbc.gridx = 0; gbc.gridy = 0; gbc.weightx = 0.15;
         JLabel skuLabel = new JLabel("SKU:");
         skuLabel.setFont(new Font("Segoe UI", Font.BOLD, 13));
-        formPanel.add(skuLabel, gbc);
+        productFormPanel.add(skuLabel, gbc);
 
         productSkuField = new JTextField(20);
         productSkuField.setFont(new Font("Segoe UI", Font.PLAIN, 14));
@@ -563,67 +569,67 @@ public class InventoryPanel extends JPanel {
         productSkuField.setText(generateSKU());
         productSkuField.setPreferredSize(new Dimension(200, 30));
         gbc.gridx = 1; gbc.gridy = 0; gbc.weightx = 0.35;
-        formPanel.add(productSkuField, gbc);
+        productFormPanel.add(productSkuField, gbc);
 
         gbc.gridx = 2; gbc.gridy = 0; gbc.weightx = 0.15;
         JLabel nameLabel = new JLabel("Product Name:");
         nameLabel.setFont(new Font("Segoe UI", Font.BOLD, 13));
-        formPanel.add(nameLabel, gbc);
+        productFormPanel.add(nameLabel, gbc);
 
         productNameField = new JTextField(25);
         productNameField.setFont(new Font("Segoe UI", Font.PLAIN, 14));
         productNameField.setPreferredSize(new Dimension(250, 30));
         gbc.gridx = 3; gbc.gridy = 0; gbc.weightx = 0.35;
-        formPanel.add(productNameField, gbc);
+        productFormPanel.add(productNameField, gbc);
 
         // Row 1: Category and Reorder Level
         gbc.gridx = 0; gbc.gridy = 1; gbc.weightx = 0.15;
         JLabel catLabel = new JLabel("Category:");
         catLabel.setFont(new Font("Segoe UI", Font.BOLD, 13));
-        formPanel.add(catLabel, gbc);
+        productFormPanel.add(catLabel, gbc);
 
         productCategoryCombo = new JComboBox<>();
         productCategoryCombo.setFont(new Font("Segoe UI", Font.PLAIN, 14));
         productCategoryCombo.setPreferredSize(new Dimension(200, 30));
         gbc.gridx = 1; gbc.gridy = 1; gbc.weightx = 0.35;
-        formPanel.add(productCategoryCombo, gbc);
+        productFormPanel.add(productCategoryCombo, gbc);
 
         gbc.gridx = 2; gbc.gridy = 1; gbc.weightx = 0.15;
         JLabel reorderLabel = new JLabel("Reorder Level:");
         reorderLabel.setFont(new Font("Segoe UI", Font.BOLD, 13));
-        formPanel.add(reorderLabel, gbc);
+        productFormPanel.add(reorderLabel, gbc);
 
         productReorderField = new JTextField(15);
         productReorderField.setFont(new Font("Segoe UI", Font.PLAIN, 14));
         productReorderField.setText("10"); // Default value
         productReorderField.setPreferredSize(new Dimension(150, 30));
         gbc.gridx = 3; gbc.gridy = 1; gbc.weightx = 0.35;
-        formPanel.add(productReorderField, gbc);
+        productFormPanel.add(productReorderField, gbc);
 
         // Row 2: Minimum Price and Active Status
         gbc.gridx = 0; gbc.gridy = 2; gbc.weightx = 0.15;
         JLabel minPriceLabel = new JLabel("Min Price (ksh):");
         minPriceLabel.setFont(new Font("Segoe UI", Font.BOLD, 13));
-        formPanel.add(minPriceLabel, gbc);
+        productFormPanel.add(minPriceLabel, gbc);
 
         productMinPriceField = new JTextField(15);
         productMinPriceField.setFont(new Font("Segoe UI", Font.PLAIN, 14));
         productMinPriceField.setPreferredSize(new Dimension(150, 30));
         gbc.gridx = 1; gbc.gridy = 2; gbc.weightx = 0.35;
-        formPanel.add(productMinPriceField, gbc);
+        productFormPanel.add(productMinPriceField, gbc);
 
         productActiveCheck = new JCheckBox("Active Product");
         productActiveCheck.setSelected(true);
         productActiveCheck.setFont(new Font("Segoe UI", Font.BOLD, 13));
         productActiveCheck.setBackground(Color.WHITE);
         gbc.gridx = 2; gbc.gridy = 2; gbc.gridwidth = 2; gbc.weightx = 0.5;
-        formPanel.add(productActiveCheck, gbc);
+        productFormPanel.add(productActiveCheck, gbc);
 
         // Row 3: Description
         gbc.gridx = 0; gbc.gridy = 3; gbc.weightx = 0.15;
         JLabel descLabel = new JLabel("Description:");
         descLabel.setFont(new Font("Segoe UI", Font.BOLD, 13));
-        formPanel.add(descLabel, gbc);
+        productFormPanel.add(descLabel, gbc);
 
         productDescArea = new JTextArea(4, 30);
         productDescArea.setFont(new Font("Segoe UI", Font.PLAIN, 14));
@@ -633,14 +639,14 @@ public class InventoryPanel extends JPanel {
         prodDescScroll.setPreferredSize(new Dimension(400, 100));
         gbc.gridx = 1; gbc.gridy = 3; gbc.gridwidth = 3; gbc.weightx = 0.85;
         gbc.fill = GridBagConstraints.BOTH;
-        formPanel.add(prodDescScroll, gbc);
+        productFormPanel.add(prodDescScroll, gbc);
 
         // Row 4: Compatible Brands - LARGE SCROLLABLE AREA
         gbc.gridx = 0; gbc.gridy = 4; gbc.weightx = 0.15;
         JLabel brandsLabel = new JLabel("Compatible Brands:");
         brandsLabel.setFont(new Font("Segoe UI", Font.BOLD, 13));
         brandsLabel.setVerticalAlignment(SwingConstants.TOP);
-        formPanel.add(brandsLabel, gbc);
+        productFormPanel.add(brandsLabel, gbc);
 
         // Create a large panel for checkboxes with scroll
         productBrandsCheckboxPanel = new JPanel();
@@ -657,7 +663,7 @@ public class InventoryPanel extends JPanel {
         gbc.gridx = 1; gbc.gridy = 4; gbc.gridwidth = 3; gbc.weightx = 0.85;
         gbc.fill = GridBagConstraints.BOTH;
         gbc.weighty = 0.4;
-        formPanel.add(brandsScrollPane, gbc);
+        productFormPanel.add(brandsScrollPane, gbc);
 
         // Row 5: Buttons
         JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 20, 10));
@@ -715,9 +721,9 @@ public class InventoryPanel extends JPanel {
         gbc.fill = GridBagConstraints.HORIZONTAL;
         gbc.weighty = 0;
         gbc.anchor = GridBagConstraints.SOUTH;
-        formPanel.add(buttonPanel, gbc);
+        productFormPanel.add(buttonPanel, gbc);
 
-        JSplitPane splitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT, tablePanel, formPanel);
+        JSplitPane splitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT, tablePanel, productFormPanel);
         splitPane.setDividerLocation(300);
         splitPane.setResizeWeight(0.4);
 
@@ -791,10 +797,10 @@ public class InventoryPanel extends JPanel {
         tablePanel.add(tableHeaderPanel, BorderLayout.NORTH);
         tablePanel.add(scrollPane, BorderLayout.CENTER);
 
-        // Form panel - UPDATED with Edit mode
-        JPanel formPanel = new JPanel(new GridBagLayout());
-        formPanel.setBorder(BorderFactory.createTitledBorder("Add New Stock Batch"));
-        formPanel.setBackground(Color.WHITE);
+        // Form panel - UPDATED with Edit mode - store reference
+        batchFormPanel = new JPanel(new GridBagLayout());
+        batchFormPanel.setBorder(BorderFactory.createTitledBorder("Add New Stock Batch"));
+        batchFormPanel.setBackground(Color.WHITE);
 
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.insets = new Insets(5, 5, 5, 5);
@@ -803,66 +809,66 @@ public class InventoryPanel extends JPanel {
 
         // Row 1: Product and Stock Condition
         gbc.gridx = 0; gbc.gridy = 0; gbc.weightx = 0.2;
-        formPanel.add(new JLabel("Product:"), gbc);
+        batchFormPanel.add(new JLabel("Product:"), gbc);
         batchProductCombo = new JComboBox<>();
         batchProductCombo.setFont(new Font("Segoe UI", Font.PLAIN, 14));
         gbc.gridx = 1; gbc.gridy = 0; gbc.weightx = 0.3;
-        formPanel.add(batchProductCombo, gbc);
+        batchFormPanel.add(batchProductCombo, gbc);
 
         gbc.gridx = 2; gbc.gridy = 0; gbc.weightx = 0.2;
-        formPanel.add(new JLabel("Stock Condition:"), gbc);
+        batchFormPanel.add(new JLabel("Stock Condition:"), gbc);
         batchStockConditionCombo = new JComboBox<>();
         batchStockConditionCombo.setFont(new Font("Segoe UI", Font.PLAIN, 14));
         gbc.gridx = 3; gbc.gridy = 0; gbc.weightx = 0.3;
-        formPanel.add(batchStockConditionCombo, gbc);
+        batchFormPanel.add(batchStockConditionCombo, gbc);
 
         // Row 2: Batch Number and Prices
         gbc.gridx = 0; gbc.gridy = 1; gbc.weightx = 0.2;
-        formPanel.add(new JLabel("Batch Number:"), gbc);
+        batchFormPanel.add(new JLabel("Batch Number:"), gbc);
         batchNumberField = new JTextField(15);
         batchNumberField.setFont(new Font("Segoe UI", Font.PLAIN, 14));
         gbc.gridx = 1; gbc.gridy = 1; gbc.weightx = 0.3;
-        formPanel.add(batchNumberField, gbc);
+        batchFormPanel.add(batchNumberField, gbc);
 
         gbc.gridx = 2; gbc.gridy = 1; gbc.weightx = 0.2;
-        formPanel.add(new JLabel("Buying Price (ksh):"), gbc);
+        batchFormPanel.add(new JLabel("Buying Price (ksh):"), gbc);
         batchBuyingPriceField = new JTextField(15);
         batchBuyingPriceField.setFont(new Font("Segoe UI", Font.PLAIN, 14));
         gbc.gridx = 3; gbc.gridy = 1; gbc.weightx = 0.3;
-        formPanel.add(batchBuyingPriceField, gbc);
+        batchFormPanel.add(batchBuyingPriceField, gbc);
 
         // Row 3: Selling Price and Quantity Received
         gbc.gridx = 0; gbc.gridy = 2; gbc.weightx = 0.2;
-        formPanel.add(new JLabel("Selling Price (ksh):"), gbc);
+        batchFormPanel.add(new JLabel("Selling Price (ksh):"), gbc);
         batchSellingPriceField = new JTextField(15);
         batchSellingPriceField.setFont(new Font("Segoe UI", Font.PLAIN, 14));
         gbc.gridx = 1; gbc.gridy = 2; gbc.weightx = 0.3;
-        formPanel.add(batchSellingPriceField, gbc);
+        batchFormPanel.add(batchSellingPriceField, gbc);
 
         gbc.gridx = 2; gbc.gridy = 2; gbc.weightx = 0.2;
-        formPanel.add(new JLabel("Quantity Received:"), gbc);
+        batchFormPanel.add(new JLabel("Quantity Received:"), gbc);
         batchQuantityReceivedField = new JTextField(15);
         batchQuantityReceivedField.setFont(new Font("Segoe UI", Font.PLAIN, 14));
         batchQuantityReceivedField.setEditable(true); // Can edit when adding
         gbc.gridx = 3; gbc.gridy = 2; gbc.weightx = 0.3;
-        formPanel.add(batchQuantityReceivedField, gbc);
+        batchFormPanel.add(batchQuantityReceivedField, gbc);
 
         // Row 4: Quantity Remaining and Expiry Date
         gbc.gridx = 0; gbc.gridy = 3; gbc.weightx = 0.2;
-        formPanel.add(new JLabel("Quantity Remaining:"), gbc);
+        batchFormPanel.add(new JLabel("Quantity Remaining:"), gbc);
         batchQuantityRemainingField = new JTextField(15);
         batchQuantityRemainingField.setFont(new Font("Segoe UI", Font.PLAIN, 14));
         batchQuantityRemainingField.setEditable(true); // Can edit when updating
         gbc.gridx = 1; gbc.gridy = 3; gbc.weightx = 0.3;
-        formPanel.add(batchQuantityRemainingField, gbc);
+        batchFormPanel.add(batchQuantityRemainingField, gbc);
 
         gbc.gridx = 2; gbc.gridy = 3; gbc.weightx = 0.2;
-        formPanel.add(new JLabel("Expiry Date (optional):"), gbc);
+        batchFormPanel.add(new JLabel("Expiry Date (optional):"), gbc);
         batchExpiryField = new JTextField(15);
         batchExpiryField.setFont(new Font("Segoe UI", Font.PLAIN, 14));
         batchExpiryField.putClientProperty("JTextField.placeholderText", "YYYY-MM-DD");
         gbc.gridx = 3; gbc.gridy = 3; gbc.weightx = 0.3;
-        formPanel.add(batchExpiryField, gbc);
+        batchFormPanel.add(batchExpiryField, gbc);
 
         // Row 5: Buttons - UPDATED with Add/Update toggle
         JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
@@ -892,9 +898,9 @@ public class InventoryPanel extends JPanel {
         buttonPanel.add(cancelEditBatchBtn);
 
         gbc.gridx = 0; gbc.gridy = 4; gbc.gridwidth = 4; gbc.weightx = 1.0;
-        formPanel.add(buttonPanel, gbc);
+        batchFormPanel.add(buttonPanel, gbc);
 
-        JSplitPane splitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT, tablePanel, formPanel);
+        JSplitPane splitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT, tablePanel, batchFormPanel);
         splitPane.setDividerLocation(300);
         splitPane.setResizeWeight(0.7);
 
@@ -1316,15 +1322,11 @@ public class InventoryPanel extends JPanel {
         addProdBtn.setVisible(true);
         updateProdBtn.setVisible(false);
 
-        // Update form title
-        JPanel formPanel = (JPanel) getComponent(0); // Get the main panel
-        JTabbedPane tabbedPane = (JTabbedPane) formPanel.getComponent(0);
-        Component productsTab = tabbedPane.getComponentAt(3); // Products tab is at index 3
-        if (productsTab instanceof JPanel) {
-            JPanel productsPanel = (JPanel) productsTab;
-            JSplitPane splitPane = (JSplitPane) productsPanel.getComponent(0);
-            JPanel bottomPanel = (JPanel) splitPane.getRightComponent();
-            bottomPanel.setBorder(BorderFactory.createTitledBorder("Product Management"));
+        // Update form title using stored reference
+        if (productFormPanel != null) {
+            productFormPanel.setBorder(BorderFactory.createTitledBorder("Product Management"));
+            productFormPanel.revalidate();
+            productFormPanel.repaint();
         }
     }
 
@@ -1350,15 +1352,11 @@ public class InventoryPanel extends JPanel {
         updateBatchBtn.setVisible(false);
         cancelEditBatchBtn.setVisible(false);
 
-        // Update form title
-        JPanel formPanel = (JPanel) getComponent(0); // Get the main panel
-        JTabbedPane tabbedPane = (JTabbedPane) formPanel.getComponent(0);
-        Component batchesTab = tabbedPane.getComponentAt(4); // Batches tab is at index 4
-        if (batchesTab instanceof JPanel) {
-            JPanel batchesPanel = (JPanel) batchesTab;
-            JSplitPane splitPane = (JSplitPane) batchesPanel.getComponent(0);
-            JPanel bottomPanel = (JPanel) splitPane.getRightComponent();
-            bottomPanel.setBorder(BorderFactory.createTitledBorder("Add New Stock Batch"));
+        // Update form title using stored reference
+        if (batchFormPanel != null) {
+            batchFormPanel.setBorder(BorderFactory.createTitledBorder("Add New Stock Batch"));
+            batchFormPanel.revalidate();
+            batchFormPanel.repaint();
         }
     }
 
@@ -1924,6 +1922,7 @@ public class InventoryPanel extends JPanel {
         };
         worker.execute();
     }
+
     private void setEditMode(boolean edit) {
         isEditMode = edit;
 
@@ -1931,103 +1930,21 @@ public class InventoryPanel extends JPanel {
             addProdBtn.setVisible(false);
             updateProdBtn.setVisible(true);
 
-            // Find the form panel directly
-            for (Component comp : getComponents()) {
-                if (comp instanceof JTabbedPane) {
-                    JTabbedPane tabbedPane = (JTabbedPane) comp;
-                    Component productsTab = tabbedPane.getComponentAt(3); // Products tab
-                    if (productsTab instanceof JPanel) {
-                        updateProductFormTitle((JPanel) productsTab, "Edit Product (ID: " + selectedProductId + ")");
-                    }
-                    break;
-                }
+            // Update form title using stored reference
+            if (productFormPanel != null) {
+                productFormPanel.setBorder(BorderFactory.createTitledBorder("Edit Product (ID: " + selectedProductId + ")"));
+                productFormPanel.revalidate();
+                productFormPanel.repaint();
             }
         } else {
             addProdBtn.setVisible(true);
             updateProdBtn.setVisible(false);
 
-            // Find the form panel directly
-            for (Component comp : getComponents()) {
-                if (comp instanceof JTabbedPane) {
-                    JTabbedPane tabbedPane = (JTabbedPane) comp;
-                    Component productsTab = tabbedPane.getComponentAt(3); // Products tab
-                    if (productsTab instanceof JPanel) {
-                        updateProductFormTitle((JPanel) productsTab, "Product Management");
-                    }
-                    break;
-                }
-            }
-        }
-    }
-
-    private void updateProductFormTitle(JPanel productsPanel, String newTitle) {
-        // Find the split pane
-        for (Component comp : productsPanel.getComponents()) {
-            if (comp instanceof JSplitPane) {
-                JSplitPane splitPane = (JSplitPane) comp;
-                Component rightComponent = splitPane.getRightComponent();
-                if (rightComponent instanceof JPanel) {
-                    JPanel formPanel = (JPanel) rightComponent;
-                    formPanel.setBorder(BorderFactory.createTitledBorder(newTitle));
-                    formPanel.revalidate();
-                    formPanel.repaint();
-                }
-                break;
-            }
-        }
-    }
-
-    private void setBatchEditMode(boolean edit) {
-        isEditBatchMode = edit;
-
-        if (edit) {
-            addBatchBtn.setVisible(false);
-            updateBatchBtn.setVisible(true);
-            cancelEditBatchBtn.setVisible(true);
-
-            // Find the form panel directly
-            for (Component comp : getComponents()) {
-                if (comp instanceof JTabbedPane) {
-                    JTabbedPane tabbedPane = (JTabbedPane) comp;
-                    Component batchesTab = tabbedPane.getComponentAt(4); // Batches tab
-                    if (batchesTab instanceof JPanel) {
-                        updateBatchFormTitle((JPanel) batchesTab, "Edit Stock Batch (ID: " + selectedStockBatchId + ")");
-                    }
-                    break;
-                }
-            }
-        } else {
-            addBatchBtn.setVisible(true);
-            updateBatchBtn.setVisible(false);
-            cancelEditBatchBtn.setVisible(false);
-
-            // Find the form panel directly
-            for (Component comp : getComponents()) {
-                if (comp instanceof JTabbedPane) {
-                    JTabbedPane tabbedPane = (JTabbedPane) comp;
-                    Component batchesTab = tabbedPane.getComponentAt(4); // Batches tab
-                    if (batchesTab instanceof JPanel) {
-                        updateBatchFormTitle((JPanel) batchesTab, "Add New Stock Batch");
-                    }
-                    break;
-                }
-            }
-        }
-    }
-
-    private void updateBatchFormTitle(JPanel batchesPanel, String newTitle) {
-        // Find the split pane
-        for (Component comp : batchesPanel.getComponents()) {
-            if (comp instanceof JSplitPane) {
-                JSplitPane splitPane = (JSplitPane) comp;
-                Component rightComponent = splitPane.getRightComponent();
-                if (rightComponent instanceof JPanel) {
-                    JPanel formPanel = (JPanel) rightComponent;
-                    formPanel.setBorder(BorderFactory.createTitledBorder(newTitle));
-                    formPanel.revalidate();
-                    formPanel.repaint();
-                }
-                break;
+            // Update form title using stored reference
+            if (productFormPanel != null) {
+                productFormPanel.setBorder(BorderFactory.createTitledBorder("Product Management"));
+                productFormPanel.revalidate();
+                productFormPanel.repaint();
             }
         }
     }
@@ -2436,6 +2353,34 @@ public class InventoryPanel extends JPanel {
             }
         };
         worker.execute();
+    }
+
+    private void setBatchEditMode(boolean edit) {
+        isEditBatchMode = edit;
+
+        if (edit) {
+            addBatchBtn.setVisible(false);
+            updateBatchBtn.setVisible(true);
+            cancelEditBatchBtn.setVisible(true);
+
+            // Update form title using stored reference
+            if (batchFormPanel != null) {
+                batchFormPanel.setBorder(BorderFactory.createTitledBorder("Edit Stock Batch (ID: " + selectedStockBatchId + ")"));
+                batchFormPanel.revalidate();
+                batchFormPanel.repaint();
+            }
+        } else {
+            addBatchBtn.setVisible(true);
+            updateBatchBtn.setVisible(false);
+            cancelEditBatchBtn.setVisible(false);
+
+            // Update form title using stored reference
+            if (batchFormPanel != null) {
+                batchFormPanel.setBorder(BorderFactory.createTitledBorder("Add New Stock Batch"));
+                batchFormPanel.revalidate();
+                batchFormPanel.repaint();
+            }
+        }
     }
 
     private void cancelBatchEdit() {
