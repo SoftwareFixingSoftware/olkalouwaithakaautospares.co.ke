@@ -310,7 +310,7 @@ public class EmailReportsPanel extends JPanel {
                 BorderFactory.createTitledBorder("Status"),
                 BorderFactory.createEmptyBorder(5, 5, 5, 5)
         ));
-        statusArea.setText("Configure your report and click 'Send Report via Email' to send.");
+        statusArea.setText("Configure your report and click 'Send Report' to send.");
 
         JScrollPane scrollPane = new JScrollPane(statusArea);
         scrollPane.setBorder(null);
@@ -436,7 +436,7 @@ public class EmailReportsPanel extends JPanel {
             @Override
             protected void done() {
                 sendButton.setEnabled(true);
-                sendButton.setText("Send Report via Email");
+                sendButton.setText("Send Report");
 
                 if (error != null) {
                     statusArea.setText("Error sending email: " + error.getMessage());
@@ -618,7 +618,7 @@ public class EmailReportsPanel extends JPanel {
         dateField.setText(LocalDate.now().format(dateFormatter));
         fromField.setText(LocalDate.now().minusDays(7).format(dateFormatter));
         toField.setText(LocalDate.now().format(dateFormatter));
-        statusArea.setText("Form cleared. Configure your report and click 'Send Report via Email' to send.");
+        statusArea.setText("Form cleared. Configure your report and click 'Send Report' to send.");
         statusArea.setForeground(Color.BLACK);
         updateDateFieldsVisibility();
     }

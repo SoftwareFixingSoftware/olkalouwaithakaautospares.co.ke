@@ -111,7 +111,7 @@ public class DashboardHome extends JPanel {
         gbc.weighty = 1.0;
 
         // Create stat cards with loading state
-        totalSalesLabel = new JLabel("₦ 0.00");
+        totalSalesLabel = new JLabel("ksh 0.00");
         totalSalesLabel.setFont(new Font("Segoe UI", Font.BOLD, 28));
         totalSalesDesc = new JLabel("Loading...");
 
@@ -127,7 +127,7 @@ public class DashboardHome extends JPanel {
         lowStockLabel.setFont(new Font("Segoe UI", Font.BOLD, 28));
         lowStockDesc = new JLabel("Loading...");
 
-        creditSalesLabel = new JLabel("₦ 0.00");
+        creditSalesLabel = new JLabel("ksh 0.00");
         creditSalesLabel.setFont(new Font("Segoe UI", Font.BOLD, 28));
         creditSalesDesc = new JLabel("Loading...");
 
@@ -359,11 +359,11 @@ public class DashboardHome extends JPanel {
         DecimalFormat df = new DecimalFormat("#,##0.00");
 
         // Update value labels
-        totalSalesLabel.setText("₦ " + df.format(stats.totalSales));
+        totalSalesLabel.setText("ksh " + df.format(stats.totalSales));
         newCustomersLabel.setText(String.valueOf(stats.newCustomers));
         pendingReturnsLabel.setText(String.valueOf(stats.pendingReturns));
         lowStockLabel.setText(String.valueOf(stats.lowStockItems));
-        creditSalesLabel.setText("₦ " + df.format(stats.creditSales));
+        creditSalesLabel.setText("ksh " + df.format(stats.creditSales));
 
         // Update description labels
         totalSalesDesc.setText(String.format("%d transactions", salesData.size()));

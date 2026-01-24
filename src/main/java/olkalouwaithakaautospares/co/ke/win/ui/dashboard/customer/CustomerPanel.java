@@ -789,7 +789,7 @@ public class CustomerPanel extends JPanel {
                         id,
                         name,
                         phone,
-                        String.format("₦ %,.2f", creditLimit != null ? creditLimit : 0.0),
+                        String.format("ksh %,.2f", creditLimit != null ? creditLimit : 0.0),
                         isActive ? "Active" : "Inactive",
                         createdAt.length() > 10 ? createdAt.substring(0, 10) : createdAt
                 });

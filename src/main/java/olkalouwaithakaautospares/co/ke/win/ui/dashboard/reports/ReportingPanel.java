@@ -578,7 +578,7 @@ public class ReportingPanel extends JPanel {
                     Integer transactions = safeIntegerFromObject(summary.get("totalTransactions"));
 
                     String summaryText = String.format(
-                            "Date: %s | Total Sales: ₦ %,.2f | Profit: ₦ %,.2f | Transactions: %d",
+                            "Date: %s | Total Sales: ksh %,.2f | Profit: ksh %,.2f | Transactions: %d",
                             formatDisplayDate(dateStr),
                             totalSales != null ? totalSales : 0.0,
                             totalProfit != null ? totalProfit : 0.0,
@@ -688,7 +688,7 @@ public class ReportingPanel extends JPanel {
                             : 0;
 
                     String summaryText = String.format(
-                            "Range: %s to %s | Days: %d | Total Sales: ₦ %,.2f | Total Profit: ₦ %,.2f | Avg/Day: ₦ %,.2f",
+                            "Range: %s to %s | Days: %d | Total Sales: ksh %,.2f | Total Profit: ksh %,.2f | Avg/Day: ksh %,.2f",
                             formatDisplayDate(fromStr),
                             formatDisplayDate(toStr),
                             summaries.size(),
@@ -785,7 +785,7 @@ public class ReportingPanel extends JPanel {
                             : 0;
 
                     String summaryText = String.format(
-                            "Date: %s | Products: %d | Total Revenue: ₦ %,.2f | Total Profit: ₦ %,.2f | Profit Margin: %.1f%% | Total Units: %d",
+                            "Date: %s | Products: %d | Total Revenue: ksh %,.2f | Total Profit: ksh %,.2f | Profit Margin: %.1f%% | Total Units: %d",
                             formatDisplayDate(dateStr),
                             stats.size(),
                             totalRevenue,
@@ -884,7 +884,7 @@ public class ReportingPanel extends JPanel {
                     double profitMargin = totalRevenue > 0 ? (totalProfit / totalRevenue * 100) : 0;
 
                     String summaryText = String.format(
-                            "Range: %s to %s | Products: %d | Total Revenue: ₦ %,.2f | Total Profit: ₦ %,.2f | Profit Margin: %.1f%%",
+                            "Range: %s to %s | Products: %d | Total Revenue: ksh %,.2f | Total Profit: ksh %,.2f | Profit Margin: %.1f%%",
                             formatDisplayDate(fromStr), formatDisplayDate(toStr), stats.size(), totalRevenue, totalProfit, profitMargin
                     );
                     SwingUtilities.invokeLater(() -> productSummaryArea.setText(summaryText));
@@ -969,7 +969,7 @@ public class ReportingPanel extends JPanel {
                             : 0;
 
                     String summaryText = String.format(
-                            "Date: %s | Cashiers: %d | Total Sales: ₦ %,.2f | Paid: ₦ %,.2f | Credit: ₦ %,.2f | Avg Sale: ₦ %,.2f",
+                            "Date: %s | Cashiers: %d | Total Sales: ksh %,.2f | Paid: ksh %,.2f | Credit: ksh %,.2f | Avg Sale: ksh %,.2f",
                             formatDisplayDate(dateStr),
                             performances.size(),
                             totalSales,
@@ -1070,7 +1070,7 @@ public class ReportingPanel extends JPanel {
                     double avgSale = totalTransactions > 0 ? totalSales / totalTransactions : 0;
 
                     String summaryText = String.format(
-                            "Range: %s to %s | Cashiers: %d | Total Sales: ₦ %,.2f | Paid: ₦ %,.2f | Credit: ₦ %,.2f",
+                            "Range: %s to %s | Cashiers: %d | Total Sales: ksh %,.2f | Paid: ksh %,.2f | Credit: ksh %,.2f",
                             formatDisplayDate(fromStr), formatDisplayDate(toStr), performances.size(), totalSales, paidSales, creditSales
                     );
                     SwingUtilities.invokeLater(() -> cashierSummaryArea.setText(summaryText));
@@ -1115,10 +1115,10 @@ public class ReportingPanel extends JPanel {
 
                 dailyModel.addRow(new Object[]{
                         date,
-                        String.format("₦ %,.2f", totalSales != null ? totalSales : 0.0),
-                        String.format("₦ %,.2f", totalProfit != null ? totalProfit : 0.0),
-                        String.format("₦ %,.2f", paidSales != null ? paidSales : 0.0),
-                        String.format("₦ %,.2f", creditSales != null ? creditSales : 0.0),
+                        String.format("ksh %,.2f", totalSales != null ? totalSales : 0.0),
+                        String.format("ksh %,.2f", totalProfit != null ? totalProfit : 0.0),
+                        String.format("ksh %,.2f", paidSales != null ? paidSales : 0.0),
+                        String.format("ksh %,.2f", creditSales != null ? creditSales : 0.0),
                         transactions != null ? transactions : 0
                 });
             }
@@ -1144,8 +1144,8 @@ public class ReportingPanel extends JPanel {
                         productName,
                         date,
                         quantity != null ? quantity : 0,
-                        String.format("₦ %,.2f", revenue != null ? revenue : 0.0),
-                        String.format("₦ %,.2f", profit != null ? profit : 0.0),
+                        String.format("ksh %,.2f", revenue != null ? revenue : 0.0),
+                        String.format("ksh %,.2f", profit != null ? profit : 0.0),
                         String.format("%.1f%%", profitPercent)
                 });
             }
@@ -1171,11 +1171,11 @@ public class ReportingPanel extends JPanel {
                         cashierId != null ? cashierId : "N/A",
                         cashierName,
                         date,
-                        String.format("₦ %,.2f", totalSales != null ? totalSales : 0.0),
-                        String.format("₦ %,.2f", paidSales != null ? paidSales : 0.0),
-                        String.format("₦ %,.2f", creditSales != null ? creditSales : 0.0),
+                        String.format("ksh %,.2f", totalSales != null ? totalSales : 0.0),
+                        String.format("ksh %,.2f", paidSales != null ? paidSales : 0.0),
+                        String.format("ksh %,.2f", creditSales != null ? creditSales : 0.0),
                         transactions != null ? transactions : 0,
-                        String.format("₦ %,.2f", avgSale)
+                        String.format("ksh %,.2f", avgSale)
                 });
             }
         });
@@ -1314,13 +1314,13 @@ public class ReportingPanel extends JPanel {
                 details.append("===================\n");
                 details.append(String.format("Date: %s%n",
                         formatDisplayDate(Objects.toString(summary.get("saleDate"), ""))));
-                details.append(String.format("Total Sales: ₦ %,.2f%n",
+                details.append(String.format("Total Sales: ksh %,.2f%n",
                         safeDoubleFromObject(summary.get("totalSales"), 0.0)));
-                details.append(String.format("Total Profit: ₦ %,.2f%n",
+                details.append(String.format("Total Profit: ksh %,.2f%n",
                         safeDoubleFromObject(summary.get("totalProfit"), 0.0)));
-                details.append(String.format("Paid Sales: ₦ %,.2f%n",
+                details.append(String.format("Paid Sales: ksh %,.2f%n",
                         safeDoubleFromObject(summary.get("paidSales"), 0.0)));
-                details.append(String.format("Credit Sales: ₦ %,.2f%n",
+                details.append(String.format("Credit Sales: ksh %,.2f%n",
                         safeDoubleFromObject(summary.get("creditSales"), 0.0)));
                 details.append(String.format("Transactions: %d%n",
                         safeIntegerFromObject(summary.get("totalTransactions"), 0)));

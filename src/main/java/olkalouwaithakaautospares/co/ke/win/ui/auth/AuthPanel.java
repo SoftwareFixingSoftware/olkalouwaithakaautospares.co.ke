@@ -14,7 +14,6 @@ import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
-import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.regex.Pattern;
@@ -26,6 +25,18 @@ public class AuthPanel extends JPanel {
     // UI Components
     private final CardLayout cardLayout = new CardLayout();
     private final JPanel authCards = new JPanel(cardLayout);
+
+    // Reset Password Components
+    private final JTextField resetEmailField = new JTextField();
+    private final JTextField resetOtpField = new JTextField();
+    private final JPasswordField resetNewPasswordField = new JPasswordField();
+    private final JPasswordField resetConfirmPasswordField = new JPasswordField();
+    private final JLabel resetOtpStatusLabel = new JLabel(" ");
+    private final JButton resetOtpButton = new JButton("Send OTP");
+    private final JButton resetPasswordButton = new JButton("Reset Password");
+    private Timer otpTimer;
+    private int otpTimerSeconds = 300; // 5 minutes
+    private String currentResetEmail;
 
     // Input fields - signup
     private final JTextField signupFullNameField = new JTextField();
@@ -41,7 +52,6 @@ public class AuthPanel extends JPanel {
     private final JPasswordField loginPasswordField = new JPasswordField();
     private final JButton loginBtn = new JButton("Sign In");
     private final JLabel loginInlineMsg = new JLabel(" ");
-    private final JCheckBox rememberMeCheckbox = new JCheckBox("Remember me");
 
     // Container layers
     private final JPanel layeredRoot = new JPanel();
@@ -56,6 +66,7 @@ public class AuthPanel extends JPanel {
         // Initialize BaseClient (will use shared cookie manager)
         BaseClient.getInstance();
         initUI();
+        initOtpTimer();
     }
 
     private void initUI() {
@@ -92,7 +103,491 @@ public class AuthPanel extends JPanel {
         // Build auth cards
         authCards.add(createLoginPanel(), "LOGIN");
         authCards.add(createSignupPanel(), "SIGNUP");
+        authCards.add(createResetPasswordPanel(), "RESET_PASSWORD");
         cardLayout.show(authCards, "LOGIN");
+    }
+
+    private void initOtpTimer() {
+        otpTimer = new Timer(1000, e -> updateOtpTimer());
+        otpTimer.setRepeats(true);
+    }
+
+    // ---------------------------
+    // Reset Password Panel
+    // ---------------------------
+    private JPanel createResetPasswordPanel() {
+        JPanel panel = new JPanel(new GridBagLayout());
+        panel.setOpaque(true);
+        panel.setBackground(new Color(12, 0, 30));
+        panel.setBorder(new EmptyBorder(20, 20, 20, 20));
+
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.gridx = 0;
+        gbc.insets = new Insets(6, 0, 6, 0);
+
+        // Back button
+        JButton backButton = new JButton("← Back to Login");
+        backButton.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        backButton.setForeground(new Color(189, 230, 230));
+        backButton.setBorder(BorderFactory.createEmptyBorder());
+        backButton.setContentAreaFilled(false);
+        backButton.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        backButton.addActionListener(e -> switchToLogin());
+        gbc.gridy = 0;
+        gbc.anchor = GridBagConstraints.WEST;
+        panel.add(backButton, gbc);
+
+        // Title
+        JLabel header = new JLabel("Reset Password");
+        header.setFont(new Font("Segoe UI", Font.BOLD, 26));
+        header.setForeground(Color.WHITE);
+        gbc.gridy = 1;
+        gbc.insets = new Insets(20, 0, 10, 0);
+        panel.add(header, gbc);
+
+        // Subtitle
+        JLabel sub = new JLabel("Enter your email, verify OTP, and set new password");
+        sub.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        sub.setForeground(new Color(190, 190, 190));
+        gbc.gridy = 2;
+        gbc.insets = new Insets(0, 0, 30, 0);
+        panel.add(sub, gbc);
+
+        // Email field
+        gbc.gridy = 3;
+        gbc.insets = new Insets(0, 0, 5, 0);
+        panel.add(createResetInputField("Email Address", resetEmailField, "you@example.com"), gbc);
+
+        // OTP Section
+        JPanel otpPanel = new JPanel(new BorderLayout(10, 0));
+        otpPanel.setOpaque(false);
+
+        JPanel otpInputPanel = new JPanel(new BorderLayout(0, 6));
+        otpInputPanel.setOpaque(false);
+        JLabel otpLabel = new JLabel("OTP Code");
+        otpLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        otpLabel.setForeground(new Color(200, 200, 200));
+        otpInputPanel.add(otpLabel, BorderLayout.NORTH);
+
+        resetOtpField.setEnabled(false);
+        RoundedInput otpInput = new RoundedInput(resetOtpField);
+        otpInput.setPreferredSize(new Dimension(200, 44));
+        resetOtpField.setOpaque(false);
+        resetOtpField.setBorder(BorderFactory.createEmptyBorder());
+        resetOtpField.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+        resetOtpField.setCaretColor(new Color(12, 97, 103));
+        resetOtpField.setForeground(Color.WHITE);
+        otpInput.add(resetOtpField, BorderLayout.CENTER);
+        otpInputPanel.add(otpInput, BorderLayout.CENTER);
+
+        otpPanel.add(otpInputPanel, BorderLayout.CENTER);
+
+        JPanel otpButtonPanel = new JPanel(new BorderLayout());
+        otpButtonPanel.setOpaque(false);
+        otpButtonPanel.setBorder(new EmptyBorder(20, 0, 0, 0));
+        styleSecondaryButton(resetOtpButton);
+        resetOtpButton.addActionListener(e -> sendResetOtp());
+        otpButtonPanel.add(resetOtpButton, BorderLayout.CENTER);
+        otpPanel.add(otpButtonPanel, BorderLayout.EAST);
+
+        gbc.gridy = 4;
+        gbc.insets = new Insets(10, 0, 15, 0);
+        panel.add(otpPanel, gbc);
+
+        // OTP Status
+        gbc.gridy = 5;
+        gbc.insets = new Insets(0, 0, 20, 0);
+        resetOtpStatusLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        resetOtpStatusLabel.setForeground(new Color(255, 100, 100));
+        panel.add(resetOtpStatusLabel, gbc);
+
+        // New Password field
+        gbc.gridy = 6;
+        gbc.insets = new Insets(0, 0, 5, 0);
+        JPanel newPassPanel = createResetPasswordField("New Password", resetNewPasswordField);
+        resetNewPasswordField.setEnabled(false);
+        panel.add(newPassPanel, gbc);
+
+        // Confirm Password field
+        gbc.gridy = 7;
+        gbc.insets = new Insets(10, 0, 5, 0);
+        JPanel confirmPassPanel = createResetPasswordField("Confirm Password", resetConfirmPasswordField);
+        resetConfirmPasswordField.setEnabled(false);
+        panel.add(confirmPassPanel, gbc);
+
+        // Reset Password button
+        gbc.gridy = 8;
+        gbc.insets = new Insets(20, 0, 10, 0);
+        stylePrimaryButton(resetPasswordButton);
+        resetPasswordButton.setEnabled(false);
+        resetPasswordButton.addActionListener(e -> performPasswordReset());
+        panel.add(resetPasswordButton, gbc);
+
+        // Add document listeners for real-time validation
+        resetOtpField.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+            @Override public void insertUpdate(javax.swing.event.DocumentEvent e) { checkResetFormValidity(); }
+            @Override public void removeUpdate(javax.swing.event.DocumentEvent e) { checkResetFormValidity(); }
+            @Override public void changedUpdate(javax.swing.event.DocumentEvent e) { checkResetFormValidity(); }
+        });
+
+        resetNewPasswordField.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+            @Override public void insertUpdate(javax.swing.event.DocumentEvent e) { checkResetFormValidity(); }
+            @Override public void removeUpdate(javax.swing.event.DocumentEvent e) { checkResetFormValidity(); }
+            @Override public void changedUpdate(javax.swing.event.DocumentEvent e) { checkResetFormValidity(); }
+        });
+
+        resetConfirmPasswordField.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+            @Override public void insertUpdate(javax.swing.event.DocumentEvent e) { checkResetFormValidity(); }
+            @Override public void removeUpdate(javax.swing.event.DocumentEvent e) { checkResetFormValidity(); }
+            @Override public void changedUpdate(javax.swing.event.DocumentEvent e) { checkResetFormValidity(); }
+        });
+
+        // Enter key support
+        addEnterKeySupport(resetEmailField, this::sendResetOtp);
+        addEnterKeySupport(resetOtpField, () -> {
+            if (resetPasswordButton.isEnabled()) performPasswordReset();
+        });
+        addEnterKeySupport(resetNewPasswordField, () -> {
+            if (resetPasswordButton.isEnabled()) performPasswordReset();
+        });
+        addEnterKeySupport(resetConfirmPasswordField, () -> {
+            if (resetPasswordButton.isEnabled()) performPasswordReset();
+        });
+
+        return panel;
+    }
+
+    private JPanel createResetInputField(String label, JTextField textField, String placeholder) {
+        JPanel panel = new JPanel(new BorderLayout(0, 6));
+        panel.setOpaque(false);
+
+        JLabel lbl = new JLabel(label);
+        lbl.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        lbl.setForeground(new Color(200, 200, 200));
+        panel.add(lbl, BorderLayout.NORTH);
+
+        RoundedInput input = new RoundedInput(textField);
+        input.setPreferredSize(new Dimension(380, 44));
+
+        textField.setOpaque(false);
+        textField.setBorder(BorderFactory.createEmptyBorder());
+        textField.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+        textField.setCaretColor(new Color(12, 97, 103));
+
+        textField.setText(placeholder);
+        textField.setForeground(new Color(150, 150, 150));
+        textField.setToolTipText(label);
+
+        textField.addFocusListener(new FocusAdapter() {
+            @Override
+            public void focusGained(FocusEvent e) {
+                if (textField.getText().equals(placeholder)) {
+                    textField.setText("");
+                }
+                textField.setForeground(Color.WHITE);
+                input.repaint();
+            }
+            @Override
+            public void focusLost(FocusEvent e) {
+                if (textField.getText().isEmpty()) {
+                    textField.setText(placeholder);
+                    textField.setForeground(new Color(150, 150, 150));
+                } else {
+                    textField.setForeground(Color.WHITE);
+                }
+                input.repaint();
+            }
+        });
+
+        input.add(textField, BorderLayout.CENTER);
+        panel.add(input, BorderLayout.CENTER);
+        return panel;
+    }
+
+    private JPanel createResetPasswordField(String label, JPasswordField passwordField) {
+        JPanel panel = new JPanel(new BorderLayout(0, 6));
+        panel.setOpaque(false);
+
+        JLabel lbl = new JLabel(label);
+        lbl.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        lbl.setForeground(new Color(200, 200, 200));
+        panel.add(lbl, BorderLayout.NORTH);
+
+        RoundedInput input = new RoundedInput(passwordField);
+        input.setPreferredSize(new Dimension(380, 44));
+
+        passwordField.setOpaque(false);
+        passwordField.setBorder(BorderFactory.createEmptyBorder());
+        passwordField.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+        passwordField.setForeground(Color.WHITE);
+        passwordField.setCaretColor(new Color(12, 97, 103));
+        passwordField.setEchoChar('•');
+        passwordField.setToolTipText(label);
+
+        JToggleButton toggle = new JToggleButton();
+        toggle.setPreferredSize(new Dimension(30, 30));
+        toggle.setOpaque(false);
+        toggle.setBorder(BorderFactory.createEmptyBorder());
+        toggle.setContentAreaFilled(false);
+        toggle.setIcon(new ImageIcon(createEyeIcon(false)));
+        toggle.setSelectedIcon(new ImageIcon(createEyeIcon(true)));
+
+        toggle.addActionListener(e -> {
+            if (toggle.isSelected()) passwordField.setEchoChar((char) 0);
+            else passwordField.setEchoChar('•');
+            input.repaint();
+        });
+
+        input.add(passwordField, BorderLayout.CENTER);
+        input.add(toggle, BorderLayout.EAST);
+        panel.add(input, BorderLayout.CENTER);
+        return panel;
+    }
+
+    // ---------------------------
+    // Reset Password Methods
+    // ---------------------------
+    private void sendResetOtp() {
+        String email = resetEmailField.getText().trim();
+
+        if (email.isEmpty() || email.equals("you@example.com")) {
+            resetOtpStatusLabel.setText("Please enter your email address");
+            return;
+        }
+
+        if (!isValidEmail(email)) {
+            resetOtpStatusLabel.setText("Please enter a valid email address");
+            return;
+        }
+
+        currentResetEmail = email;
+        setOverlayVisible(true);
+        resetOtpStatusLabel.setText("Sending OTP...");
+        resetOtpButton.setEnabled(false);
+
+        SwingWorker<String, Void> worker = new SwingWorker<String, Void>() {
+            private String error = null;
+
+            @Override
+            protected String doInBackground() {
+                try {
+                    BaseClient client = BaseClient.getInstance();
+                    Map<String, Object> payload = new HashMap<>();
+                    payload.put("email", email);
+
+                    String response = client.post("/api/auth/forgot-password", payload);
+                    Map<String, Object> result = client.parseResponse(response);
+
+                    if (!client.isResponseSuccessful(response)) {
+                        error = client.getResponseMessage(response);
+                        return null;
+                    }
+
+                    return client.getResponseMessage(response);
+
+                } catch (Exception ex) {
+                    error = "Network error: " + ex.getMessage();
+                    return null;
+                }
+            }
+
+            @Override
+            protected void done() {
+                setOverlayVisible(false);
+                try {
+                    String result = get();
+                    if (error != null) {
+                        resetOtpStatusLabel.setText(error);
+                        showToast(error, true);
+                        resetOtpButton.setEnabled(true);
+                    } else {
+                        resetOtpStatusLabel.setText("OTP sent successfully! Check your email.");
+                        resetOtpStatusLabel.setForeground(new Color(76, 217, 100));
+
+                        // Enable OTP field and start timer
+                        resetOtpField.setEnabled(true);
+                        resetOtpButton.setText("Resend OTP");
+                        resetOtpButton.setEnabled(false);
+
+                        // Start countdown timer
+                        otpTimerSeconds = 300; // 5 minutes
+                        otpTimer.start();
+                        updateOtpTimer();
+
+                        // Enable password fields
+                        resetNewPasswordField.setEnabled(true);
+                        resetConfirmPasswordField.setEnabled(true);
+
+                        SwingUtilities.invokeLater(() -> resetOtpField.requestFocusInWindow());
+                    }
+                } catch (Exception ex) {
+                    resetOtpStatusLabel.setText("An error occurred: " + ex.getMessage());
+                    showToast("An error occurred: " + ex.getMessage(), true);
+                    resetOtpButton.setEnabled(true);
+                }
+            }
+        };
+        worker.execute();
+    }
+
+    private void updateOtpTimer() {
+        if (otpTimerSeconds > 0) {
+            otpTimerSeconds--;
+            int minutes = otpTimerSeconds / 60;
+            int seconds = otpTimerSeconds % 60;
+            resetOtpStatusLabel.setText(String.format("OTP expires in: %02d:%02d", minutes, seconds));
+            resetOtpStatusLabel.setForeground(new Color(255, 255, 255));
+
+            // Check if OTP field is filled to enable reset button
+            checkResetFormValidity();
+        } else {
+            otpTimer.stop();
+            resetOtpStatusLabel.setText("OTP has expired. Please request a new one.");
+            resetOtpStatusLabel.setForeground(new Color(255, 100, 100));
+            resetOtpButton.setEnabled(true);
+            resetOtpField.setEnabled(false);
+            resetNewPasswordField.setEnabled(false);
+            resetConfirmPasswordField.setEnabled(false);
+            resetPasswordButton.setEnabled(false);
+        }
+    }
+
+    private void checkResetFormValidity() {
+        String otp = resetOtpField.getText().trim();
+        String newPass = new String(resetNewPasswordField.getPassword());
+        String confirmPass = new String(resetConfirmPasswordField.getPassword());
+
+        boolean isValid = !otp.isEmpty() &&
+                !newPass.isEmpty() &&
+                newPass.length() >= 6 &&
+                newPass.equals(confirmPass);
+
+        resetPasswordButton.setEnabled(isValid);
+    }
+
+    private void performPasswordReset() {
+        String otp = resetOtpField.getText().trim();
+        String newPassword = new String(resetNewPasswordField.getPassword());
+        String confirmPassword = new String(resetConfirmPasswordField.getPassword());
+
+        // Validation
+        if (otp.isEmpty()) {
+            resetOtpStatusLabel.setText("Please enter the OTP");
+            resetOtpStatusLabel.setForeground(new Color(255, 100, 100));
+            return;
+        }
+
+        if (newPassword.isEmpty()) {
+            resetOtpStatusLabel.setText("Please enter a new password");
+            resetOtpStatusLabel.setForeground(new Color(255, 100, 100));
+            return;
+        }
+
+        if (newPassword.length() < 6) {
+            resetOtpStatusLabel.setText("Password must be at least 6 characters");
+            resetOtpStatusLabel.setForeground(new Color(255, 100, 100));
+            return;
+        }
+
+        if (!newPassword.equals(confirmPassword)) {
+            resetOtpStatusLabel.setText("Passwords do not match");
+            resetOtpStatusLabel.setForeground(new Color(255, 100, 100));
+            return;
+        }
+
+        if (currentResetEmail == null || currentResetEmail.isEmpty()) {
+            resetOtpStatusLabel.setText("Please request an OTP first");
+            resetOtpStatusLabel.setForeground(new Color(255, 100, 100));
+            return;
+        }
+
+        resetOtpStatusLabel.setText("Resetting password...");
+        setOverlayVisible(true);
+
+        SwingWorker<String, Void> worker = new SwingWorker<String, Void>() {
+            private String error = null;
+
+            @Override
+            protected String doInBackground() {
+                try {
+                    BaseClient client = BaseClient.getInstance();
+                    Map<String, Object> payload = new HashMap<>();
+                    payload.put("email", currentResetEmail);
+                    payload.put("otp", otp);
+                    payload.put("newPassword", newPassword);
+
+                    String response = client.post("/api/auth/reset-password", payload);
+                    Map<String, Object> result = client.parseResponse(response);
+
+                    if (!client.isResponseSuccessful(response)) {
+                        error = client.getResponseMessage(response);
+                        return null;
+                    }
+
+                    return client.getResponseMessage(response);
+
+                } catch (Exception ex) {
+                    error = "Network error: " + ex.getMessage();
+                    return null;
+                }
+            }
+
+            @Override
+            protected void done() {
+                setOverlayVisible(false);
+                try {
+                    String result = get();
+                    if (error != null) {
+                        resetOtpStatusLabel.setText(error);
+                        resetOtpStatusLabel.setForeground(new Color(255, 100, 100));
+                        showToast(error, true);
+                    } else {
+                        resetOtpStatusLabel.setText("Password reset successfully!");
+                        resetOtpStatusLabel.setForeground(new Color(76, 217, 100));
+                        showToast("Password reset successfully! You can now sign in.", false);
+
+                        // Stop timer
+                        if (otpTimer.isRunning()) {
+                            otpTimer.stop();
+                        }
+
+                        // Clear form and switch to login after 2 seconds
+                        Timer switchTimer = new Timer(2000, e -> {
+                            resetResetPasswordForm();
+                            switchToLogin();
+                        });
+                        switchTimer.setRepeats(false);
+                        switchTimer.start();
+                    }
+                } catch (Exception ex) {
+                    resetOtpStatusLabel.setText("An error occurred: " + ex.getMessage());
+                    resetOtpStatusLabel.setForeground(new Color(255, 100, 100));
+                    showToast("An error occurred: " + ex.getMessage(), true);
+                }
+            }
+        };
+        worker.execute();
+    }
+
+    private void resetResetPasswordForm() {
+        resetEmailField.setText("you@example.com");
+        resetEmailField.setForeground(new Color(150, 150, 150));
+        resetOtpField.setText("");
+        resetNewPasswordField.setText("");
+        resetConfirmPasswordField.setText("");
+        resetOtpStatusLabel.setText(" ");
+        resetOtpStatusLabel.setForeground(new Color(255, 100, 100));
+        resetOtpButton.setEnabled(true);
+        resetOtpButton.setText("Send OTP");
+        resetOtpField.setEnabled(false);
+        resetNewPasswordField.setEnabled(false);
+        resetConfirmPasswordField.setEnabled(false);
+        resetPasswordButton.setEnabled(false);
+
+        if (otpTimer.isRunning()) {
+            otpTimer.stop();
+        }
     }
 
     // ---------------------------
@@ -274,15 +769,15 @@ public class AuthPanel extends JPanel {
         gbc.gridy = 4;
         JPanel options = new JPanel(new BorderLayout());
         options.setOpaque(false);
-        rememberMeCheckbox.setOpaque(false);
-        rememberMeCheckbox.setForeground(new Color(180,180,180));
-        options.add(rememberMeCheckbox, BorderLayout.WEST);
 
         JLabel forgot = new JLabel("<html><a href='#' style='color:#bde6e6'>Forgot password?</a></html>");
         forgot.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         forgot.setFont(new Font("Segoe UI", Font.PLAIN, 12));
         forgot.addMouseListener(new MouseAdapter() {
-            @Override public void mouseClicked(MouseEvent e) { showForgotDialog(); }
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                switchToResetPassword();
+            }
         });
         options.add(forgot, BorderLayout.EAST);
         panel.add(options, gbc);
@@ -305,7 +800,10 @@ public class AuthPanel extends JPanel {
         JLabel toSignup = new JLabel("<html><span style='color:#aaa'>Don't have an account? </span><a href='#' style='color:#bde6e6'><b>Sign Up</b></a></html>");
         toSignup.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         toSignup.addMouseListener(new MouseAdapter() {
-            @Override public void mouseClicked(MouseEvent e) { switchToSignup(); }
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                switchToSignup();
+            }
         });
         panel.add(toSignup, gbc);
 
@@ -387,7 +885,10 @@ public class AuthPanel extends JPanel {
         JLabel toLogin = new JLabel("<html><span style='color:#aaa'>Already have an account? </span><a href='#' style='color:#bde6e6'><b>Sign In</b></a></html>");
         toLogin.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         toLogin.addMouseListener(new MouseAdapter() {
-            @Override public void mouseClicked(MouseEvent e) { switchToLogin(); }
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                switchToLogin();
+            }
         });
         panel.add(toLogin, gbc);
 
@@ -679,66 +1180,6 @@ public class AuthPanel extends JPanel {
         worker.execute();
     }
 
-    private void showForgotDialog() {
-        String email = JOptionPane.showInputDialog(
-                SwingUtilities.getWindowAncestor(this),
-                "Enter your account email:",
-                "Forgot Password",
-                JOptionPane.PLAIN_MESSAGE
-        );
-
-        if (email == null || email.trim().isEmpty()) return;
-
-        if (!isValidEmail(email.trim())) {
-            showToast("Please enter a valid email address", true);
-            return;
-        }
-
-        setOverlayVisible(true);
-        SwingWorker<String, Void> worker = new SwingWorker<String, Void>() {
-            private String error = null;
-
-            @Override
-            protected String doInBackground() {
-                try {
-                    BaseClient client = BaseClient.getInstance();
-                    Map<String, Object> payload = new HashMap<>();
-                    payload.put("email", email.trim());
-
-                    String response = client.post("/api/auth/forgot-password", payload);
-                    Map<String, Object> result = client.parseResponse(response);
-
-                    if (!client.isResponseSuccessful(response)) {
-                        error = client.getResponseMessage(response);
-                        return null;
-                    }
-
-                    return client.getResponseMessage(response);
-
-                } catch (Exception ex) {
-                    error = "Network error: " + ex.getMessage();
-                    return null;
-                }
-            }
-
-            @Override
-            protected void done() {
-                setOverlayVisible(false);
-                try {
-                    String result = get();
-                    if (error != null) {
-                        showToast(error, true);
-                    } else {
-                        showToast("If the email exists, an OTP was sent. Check your email.", false);
-                    }
-                } catch (Exception ex) {
-                    showToast("An error occurred: " + ex.getMessage(), true);
-                }
-            }
-        };
-        worker.execute();
-    }
-
     // ---------------------------
     // UI Helper Methods
     // ---------------------------
@@ -764,14 +1205,16 @@ public class AuthPanel extends JPanel {
         textField.setToolTipText(label);
 
         textField.addFocusListener(new FocusAdapter() {
-            @Override public void focusGained(FocusEvent e) {
+            @Override
+            public void focusGained(FocusEvent e) {
                 if (textField.getText().equals(placeholder)) {
                     textField.setText("");
                 }
                 textField.setForeground(Color.WHITE);
                 input.repaint();
             }
-            @Override public void focusLost(FocusEvent e) {
+            @Override
+            public void focusLost(FocusEvent e) {
                 if (textField.getText().isEmpty()) {
                     textField.setText(placeholder);
                     textField.setForeground(new Color(150, 150, 150));
@@ -859,6 +1302,33 @@ public class AuthPanel extends JPanel {
         });
     }
 
+    private void styleSecondaryButton(JButton button) {
+        button.setFocusPainted(false);
+        button.setBorder(BorderFactory.createEmptyBorder(10, 16, 10, 16));
+        button.setFont(new Font("Segoe UI", Font.BOLD, 13));
+        button.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        button.setForeground(new Color(12, 97, 103));
+        button.setBackground(new Color(220, 245, 245));
+        button.setOpaque(true);
+
+        button.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseEntered(MouseEvent e) {
+                button.setBackground(new Color(200, 235, 235));
+            }
+
+            @Override
+            public void mouseExited(MouseEvent e) {
+                button.setBackground(new Color(220, 245, 245));
+            }
+
+            @Override
+            public void mousePressed(MouseEvent e) {
+                button.setBackground(new Color(180, 225, 225));
+            }
+        });
+    }
+
     private void styleComboBox(JComboBox<String> combo) {
         combo.setBackground(new Color(40, 40, 40));
         combo.setForeground(Color.black);
@@ -893,6 +1363,8 @@ public class AuthPanel extends JPanel {
         overlayLayer.repaint();
         signupBtn.setEnabled(!visible);
         loginBtn.setEnabled(!visible);
+        resetOtpButton.setEnabled(!visible);
+        resetPasswordButton.setEnabled(!visible && resetPasswordButton.isEnabled());
     }
 
     private boolean isValidEmail(String email) {
@@ -914,7 +1386,7 @@ public class AuthPanel extends JPanel {
         JWindow toast = new JWindow();
         toast.setLayout(new BorderLayout());
         JLabel label = new JLabel(msg, SwingConstants.CENTER);
-         label.setBorder(new EmptyBorder(12, 20, 12, 20));
+        label.setBorder(new EmptyBorder(12, 20, 12, 20));
         label.setOpaque(true);
         label.setBackground(error ? new Color(220,80,80) : new Color(12,97,103));
         label.setForeground(Color.WHITE);
@@ -948,8 +1420,17 @@ public class AuthPanel extends JPanel {
         component.getInputMap(JComponent.WHEN_FOCUSED)
                 .put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0), "submit");
         component.getActionMap().put("submit", new AbstractAction() {
-            @Override public void actionPerformed(ActionEvent e) { action.run(); }
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                action.run();
+            }
         });
+    }
+
+    private void switchToResetPassword() {
+        resetResetPasswordForm();
+        cardLayout.show(authCards, "RESET_PASSWORD");
+        SwingUtilities.invokeLater(resetEmailField::requestFocusInWindow);
     }
 
     private void switchToLogin() {
@@ -1039,7 +1520,8 @@ public class AuthPanel extends JPanel {
 
     private JComponent createLoadingOverlay() {
         JPanel root = new JPanel(new GridBagLayout()) {
-            @Override protected void paintComponent(Graphics g) {
+            @Override
+            protected void paintComponent(Graphics g) {
                 g.setColor(new Color(0, 0, 0, 160));
                 g.fillRect(0, 0, getWidth(), getHeight());
             }
@@ -1047,7 +1529,8 @@ public class AuthPanel extends JPanel {
         root.setOpaque(false);
 
         JPanel box = new JPanel(new BorderLayout(0,8)) {
-            @Override protected void paintComponent(Graphics g) {
+            @Override
+            protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setColor(new Color(255,255,255,10));
                 g2.fillRoundRect(0, 0, getWidth(), getHeight(), 12, 12);
@@ -1061,8 +1544,14 @@ public class AuthPanel extends JPanel {
 
         JLabel spinner = new JLabel() {
             private float a = 0f;
-            { new Timer(16, e -> { a += 0.12f; repaint(); }).start(); }
-            @Override protected void paintComponent(Graphics g) {
+            {
+                new Timer(16, e -> {
+                    a += 0.12f;
+                    repaint();
+                }).start();
+            }
+            @Override
+            protected void paintComponent(Graphics g) {
                 super.paintComponent(g);
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);

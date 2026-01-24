@@ -58,11 +58,6 @@ public class ReturnPanel extends JPanel {
         put(1, "Damaged item");
         put(2, "Wrong item sent");
         put(3, "Customer changed mind");
-        put(4, "Defective product");
-        put(5, "Wrong size/type");
-        put(6, "Not as described");
-        put(7, "Late delivery");
-        put(8, "Price mismatch");
     }};
 
     // Current selection
@@ -723,7 +718,7 @@ public class ReturnPanel extends JPanel {
                 saleId,
                 saleNumber,
                 customerDisplay,
-                String.format("₦ %,.2f", total != null ? total : 0.0),
+                String.format("ksh %,.2f", total != null ? total : 0.0),
                 status,
                 date.length() > 16 ? date.substring(0, 16) : date
         });
@@ -840,8 +835,8 @@ public class ReturnPanel extends JPanel {
                             productName,
                             productId != null ? productId : "N/A",
                             quantity != null ? quantity : 0,
-                            String.format("₦ %,.2f", unitPrice != null ? unitPrice : 0.0),
-                            String.format("₦ %,.2f", total != null ? total : 0.0),
+                            String.format("ksh %,.2f", unitPrice != null ? unitPrice : 0.0),
+                            String.format("ksh %,.2f", total != null ? total : 0.0),
                             "Select"
                     });
                 }

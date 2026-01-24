@@ -3,6 +3,7 @@ package olkalouwaithakaautospares.co.ke.win.ui.dashboard.sales;
 import olkalouwaithakaautospares.co.ke.win.utils.BaseClient;
 import olkalouwaithakaautospares.co.ke.win.utils.UserSessionManager;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.core.type.TypeReference;
 
 import javax.swing.*;
 import javax.swing.event.DocumentEvent;
@@ -40,6 +41,11 @@ public class SalesPanel extends JPanel {
     private final List<Map<String, Object>> paidSales = new ArrayList<>();
     private final List<Map<String, Object>> creditSales = new ArrayList<>();
     private final List<Map<String, Object>> recentPayments = new ArrayList<>();
+
+    // Maps for search optimization
+    private final Map<Integer, String> categoriesMap = new HashMap<>();
+    private final Map<Integer, String> brandsMap = new HashMap<>();
+    private final Map<Integer, String> productCategoriesMap = new HashMap<>();
 
     // POS components
     private JTable cartTable;
@@ -101,6 +107,7 @@ public class SalesPanel extends JPanel {
         this.mapper = client.getMapper();
         this.session = UserSessionManager.getInstance();
         initUI();
+        loadCategoriesAndBrands(); // Load categories and brands for search
         loadProducts();
         loadRecentSales();
     }
@@ -154,6 +161,7 @@ public class SalesPanel extends JPanel {
 
         newSaleBtn.addActionListener(e -> clearCart());
         refreshBtn.addActionListener(e -> {
+            loadCategoriesAndBrands();
             loadProducts();
             loadRecentSales();
         });
@@ -176,7 +184,6 @@ public class SalesPanel extends JPanel {
         button.setBorder(BorderFactory.createEmptyBorder(8, 16, 8, 16));
     }
 
-    // ---------- Product grid ----------
     private JPanel createProductPanel() {
         JPanel panel = new JPanel(new BorderLayout());
         panel.setBackground(Color.WHITE);
@@ -185,53 +192,54 @@ public class SalesPanel extends JPanel {
                 BorderFactory.createEmptyBorder(15, 15, 15, 15)
         ));
 
-        // Search
+        // Search panel with enhanced search
         JPanel searchPanel = new JPanel(new BorderLayout(8, 0));
         searchPanel.setOpaque(false);
-        searchPanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 10)); // Limit height
+        searchPanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 40));
+
         searchField = new JTextField();
         searchField.setFont(new Font("Segoe UI", Font.PLAIN, 14));
         searchField.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createLineBorder(new Color(200, 200, 200), 1),
                 BorderFactory.createEmptyBorder(8, 12, 8, 12)
         ));
-        searchField.putClientProperty("JTextField.placeholderText", "Search products by name or SKU...");
-
-        // Add DocumentListener for real-time search
+        searchField.putClientProperty("JTextField.placeholderText", "Search by name, SKU, category, brands, description, or price...");
         searchField.getDocument().addDocumentListener(new DocumentListener() {
-            @Override
-            public void insertUpdate(DocumentEvent e) {
-                searchProducts(searchField.getText());
-            }
-
-            @Override
-            public void removeUpdate(DocumentEvent e) {
-                searchProducts(searchField.getText());
-            }
-
-            @Override
-            public void changedUpdate(DocumentEvent e) {
-                searchProducts(searchField.getText());
-            }
+            @Override public void insertUpdate(DocumentEvent e) { searchProducts(searchField.getText()); }
+            @Override public void removeUpdate(DocumentEvent e) { searchProducts(searchField.getText()); }
+            @Override public void changedUpdate(DocumentEvent e) { searchProducts(searchField.getText()); }
         });
 
-        JButton searchBtn = new JButton("Search");
-        styleButton(searchBtn, new Color(33, 150, 243));
-        searchBtn.addActionListener(e -> searchProducts(searchField.getText()));
+        JButton clearSearchBtn = new JButton("Clear");
+        styleButton(clearSearchBtn, new Color(158, 158, 158));
+        clearSearchBtn.addActionListener(e -> {
+            searchField.setText("");
+            searchProducts("");
+        });
+
+        JPanel searchButtonPanel = new JPanel(new GridLayout(1, 2, 5, 0));
+        searchButtonPanel.setOpaque(false);
+        searchButtonPanel.add(clearSearchBtn);
 
         searchPanel.add(searchField, BorderLayout.CENTER);
-        searchPanel.add(searchBtn, BorderLayout.EAST);
+        searchPanel.add(searchButtonPanel, BorderLayout.EAST);
 
-        // Product grid
-        productGrid = new JPanel(new GridLayout(0, 3, 10, 10));
+        // PRODUCT GRID: Fixed size grid with consistent button sizes
+        final int COLUMNS = 4; // Increased to 4 columns for better space usage
+        productGrid = new JPanel(new GridBagLayout()); // Changed to GridBagLayout for better control
         productGrid.setBorder(BorderFactory.createEmptyBorder(15, 0, 0, 0));
-        JScrollPane scrollPane = new JScrollPane(productGrid);
+        productGrid.setOpaque(false);
+
+        // Scroll pane: vertical scroll only, horizontal disabled
+        JScrollPane scrollPane = new JScrollPane(productGrid,
+                JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED,
+                JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
         scrollPane.setBorder(null);
-        scrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
-        scrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+        scrollPane.getViewport().setBackground(panel.getBackground());
 
         panel.add(searchPanel, BorderLayout.NORTH);
         panel.add(scrollPane, BorderLayout.CENTER);
+
         return panel;
     }
 
@@ -239,34 +247,87 @@ public class SalesPanel extends JPanel {
             String name,
             String description,
             double price,
-            Integer productId
+            Integer productId,
+            String categoryName,
+            String brandNames
     ) {
-        String safeDescription = (description == null || description.isBlank())
-                ? ""
-                : "<span style='font-size:10px;color:#777;'>" + description + "</span><br/>";
+        // Truncate name if too long
+        String displayName = name.length() > 25 ? name.substring(0, 22) + "..." : name;
 
-        JButton button = new JButton(
-                "<html><center>"
-                        + "<b>" + name + "</b><br/>"
-                        + safeDescription
-                        + "₦ " + String.format("%,.2f", price)
-                        + "</center></html>"
-        );
+        // Safe description, truncate to 60 chars
+        String safeDescription = "";
+        if (description != null && !description.isBlank()) {
+            String desc = description.length() > 60 ? description.substring(0, 57) + "..." : description;
+            safeDescription = "<span style='font-size:10px;color:#777;'>" + desc + "</span><br/>";
+        }
 
+        // Add category and brand info
+        String extraInfo = "";
+        if (categoryName != null && !categoryName.isEmpty()) {
+            extraInfo += "<span style='font-size:9px;color:#4CAF50;'>" + categoryName + "</span> ";
+        }
+        if (brandNames != null && !brandNames.isEmpty()) {
+            String brands = brandNames.length() > 30 ? brandNames.substring(0, 27) + "..." : brandNames;
+            extraInfo += "<span style='font-size:9px;color:#2196F3;'>" + brands + "</span>";
+        }
+
+        if (!extraInfo.isEmpty()) {
+            extraInfo = "<br/>" + extraInfo;
+        }
+
+        // HTML content
+        String html = "<html><center>"
+                + "<b>" + displayName + "</b><br/>"
+                + safeDescription
+                + extraInfo
+                + "<span style='font-size:12px;font-weight:bold;color:#E91E63;'>ksh " + String.format("%,.2f", price)
+                + "</span></center></html>";
+
+        JButton button = new JButton(html);
         button.putClientProperty("productId", productId);
-        button.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+
+        // Style - Fixed size for all buttons
+        button.setFont(new Font("Segoe UI", Font.PLAIN, 11));
         button.setBackground(Color.WHITE);
         button.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createLineBorder(new Color(230, 230, 230), 1),
-                BorderFactory.createEmptyBorder(18, 8, 18, 8)
+                BorderFactory.createEmptyBorder(12, 8, 12, 8)
         ));
         button.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         button.setFocusPainted(false);
 
+        // Fixed size - all buttons same size
+        Dimension buttonSize = new Dimension(180, 150); // Consistent size
+        button.setMinimumSize(buttonSize);
+        button.setPreferredSize(buttonSize);
+        button.setMaximumSize(buttonSize);
+
+        // Hover effect
+        button.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseEntered(MouseEvent evt) {
+                button.setBackground(new Color(245, 245, 245));
+                button.setBorder(BorderFactory.createCompoundBorder(
+                        BorderFactory.createLineBorder(new Color(33, 150, 243), 2),
+                        BorderFactory.createEmptyBorder(10, 6, 10, 6)
+                ));
+            }
+            @Override
+            public void mouseExited(MouseEvent evt) {
+                button.setBackground(Color.WHITE);
+                button.setBorder(BorderFactory.createCompoundBorder(
+                        BorderFactory.createLineBorder(new Color(230, 230, 230), 1),
+                        BorderFactory.createEmptyBorder(12, 8, 12, 8)
+                ));
+            }
+        });
+
+        // Click handler
         button.addActionListener(e -> {
             Integer id = (Integer) button.getClientProperty("productId");
-
             Double minPrice = price;
+
+            // Search in products list for the actual minimumSellingPrice
             for (Map<String, Object> product : products) {
                 Integer prodId = getIntegerValue(product, "id", 0);
                 if (prodId.equals(id)) {
@@ -276,50 +337,247 @@ public class SalesPanel extends JPanel {
             }
 
             addToCart(id, name, price, minPrice);
-            rightTabs.setSelectedIndex(0);
+            rightTabs.setSelectedIndex(0); // switch to cart tab
         });
 
         return button;
     }
 
-
     private void searchProducts(String query) {
         if (query == null || query.trim().isEmpty()) {
             // Show all products
             productGrid.removeAll();
+            GridBagConstraints gbc = new GridBagConstraints();
+            gbc.insets = new Insets(5, 5, 5, 5);
+            gbc.fill = GridBagConstraints.NONE;
+            gbc.anchor = GridBagConstraints.NORTHWEST;
+
+            int col = 0;
+            int row = 0;
+
             for (Map<String, Object> product : products) {
                 String name = getStringValue(product, "name", "Unknown Product");
                 Double price = getDoubleValue(product, "minimumSellingPrice", 0.0);
                 Integer productId = getIntegerValue(product, "id", 0);
-                String description = getStringValue(product,"description","no description");
-                productGrid.add(createProductButton(name,description, price, productId));
+                String description = getStringValue(product, "description", "");
+
+                // Get category name
+                Integer categoryId = getIntegerValue(product, "categoryId", null);
+                String categoryName = categoryId != null ? categoriesMap.get(categoryId) : "";
+
+                // Get brand names
+                String brandNames = "";
+                try {
+                    String compatibleBrandsJson = getStringValue(product, "compatibleBrandIds", "[]");
+                    if (!compatibleBrandsJson.isEmpty()) {
+                        List<Integer> brandIds = mapper.readValue(compatibleBrandsJson, new TypeReference<List<Integer>>() {});
+                        StringBuilder brands = new StringBuilder();
+                        for (Integer brandId : brandIds) {
+                            String brandName = brandsMap.get(brandId);
+                            if (brandName != null) {
+                                if (brands.length() > 0) {
+                                    brands.append(", ");
+                                }
+                                brands.append(brandName);
+                            }
+                        }
+                        brandNames = brands.toString();
+                    }
+                } catch (Exception e) {
+                    // Ignore JSON parsing errors
+                }
+
+                JButton button = createProductButton(name, description, price, productId, categoryName, brandNames);
+
+                gbc.gridx = col;
+                gbc.gridy = row;
+                productGrid.add(button, gbc);
+
+                col++;
+                if (col >= 4) { // 4 columns
+                    col = 0;
+                    row++;
+                }
             }
+
+            // Fill remaining space if needed
+            gbc.gridx = 0;
+            gbc.gridy = row + 1;
+            gbc.weightx = 1.0;
+            gbc.weighty = 1.0;
+            gbc.fill = GridBagConstraints.BOTH;
+            productGrid.add(Box.createGlue(), gbc);
+
         } else {
             List<Map<String, Object>> filtered = new ArrayList<>();
             String lowerQuery = query.toLowerCase();
+
             for (Map<String, Object> product : products) {
                 String name = getStringValue(product, "name", "").toLowerCase();
                 String sku = getStringValue(product, "sku", "").toLowerCase();
-                if (name.contains(lowerQuery) || sku.contains(lowerQuery)) filtered.add(product);
+                String description = getStringValue(product, "description", "").toLowerCase();
+                Double price = getDoubleValue(product, "minimumSellingPrice", 0.0);
+
+                // Get category name
+                Integer categoryId = getIntegerValue(product, "categoryId", null);
+                String categoryName = (categoryId != null ? categoriesMap.get(categoryId) : "").toLowerCase();
+
+                // Get brand names
+                String brandNames = "";
+                try {
+                    String compatibleBrandsJson = getStringValue(product, "compatibleBrandIds", "[]");
+                    if (!compatibleBrandsJson.isEmpty()) {
+                        List<Integer> brandIds = mapper.readValue(compatibleBrandsJson, new TypeReference<List<Integer>>() {});
+                        StringBuilder brands = new StringBuilder();
+                        for (Integer brandId : brandIds) {
+                            String brandName = brandsMap.get(brandId);
+                            if (brandName != null) {
+                                if (brands.length() > 0) {
+                                    brands.append(", ");
+                                }
+                                brands.append(brandName);
+                            }
+                        }
+                        brandNames = brands.toString().toLowerCase();
+                    }
+                } catch (Exception e) {
+                    // Ignore JSON parsing errors
+                }
+
+                // Check price as string
+                String priceStr = String.format("%.2f", price).toLowerCase();
+
+                // Enhanced search: check all fields
+                if (name.contains(lowerQuery) ||
+                        sku.contains(lowerQuery) ||
+                        description.contains(lowerQuery) ||
+                        categoryName.contains(lowerQuery) ||
+                        brandNames.contains(lowerQuery) ||
+                        priceStr.contains(lowerQuery.replace("ksh", "").replace(",", "").trim()) ||
+                        matchesPriceRange(query, price)) {
+                    filtered.add(product);
+                }
             }
+
             productGrid.removeAll();
+            GridBagConstraints gbc = new GridBagConstraints();
+            gbc.insets = new Insets(5, 5, 5, 5);
+            gbc.fill = GridBagConstraints.NONE;
+            gbc.anchor = GridBagConstraints.NORTHWEST;
+
             if (filtered.isEmpty()) {
-                JLabel noResultsLabel = new JLabel("No products found for: " + query, SwingConstants.CENTER);
+                JLabel noResultsLabel = new JLabel("No products found for: \"" + query + "\"", SwingConstants.CENTER);
                 noResultsLabel.setFont(new Font("Segoe UI", Font.PLAIN, 14));
                 noResultsLabel.setForeground(new Color(150, 150, 150));
-                productGrid.add(noResultsLabel);
+                noResultsLabel.setPreferredSize(new Dimension(600, 100));
+
+                gbc.gridx = 0;
+                gbc.gridy = 0;
+                gbc.gridwidth = 4;
+                gbc.fill = GridBagConstraints.BOTH;
+                productGrid.add(noResultsLabel, gbc);
             } else {
+                int col = 0;
+                int row = 0;
+
                 for (Map<String, Object> product : filtered) {
                     String name = getStringValue(product, "name", "Unknown Product");
                     Double price = getDoubleValue(product, "minimumSellingPrice", 0.0);
                     Integer productId = getIntegerValue(product, "id", 0);
-                    String description = getStringValue(product,"description","no description");
-                    productGrid.add(createProductButton(name, description, price, productId));
+                    String description = getStringValue(product, "description", "");
+
+                    // Get category name
+                    Integer categoryId = getIntegerValue(product, "categoryId", null);
+                    String categoryName = categoryId != null ? categoriesMap.get(categoryId) : "";
+
+                    // Get brand names
+                    String brandNames = "";
+                    try {
+                        String compatibleBrandsJson = getStringValue(product, "compatibleBrandIds", "[]");
+                        if (!compatibleBrandsJson.isEmpty()) {
+                            List<Integer> brandIds = mapper.readValue(compatibleBrandsJson, new TypeReference<List<Integer>>() {});
+                            StringBuilder brands = new StringBuilder();
+                            for (Integer brandId : brandIds) {
+                                String brandName = brandsMap.get(brandId);
+                                if (brandName != null) {
+                                    if (brands.length() > 0) {
+                                        brands.append(", ");
+                                    }
+                                    brands.append(brandName);
+                                }
+                            }
+                            brandNames = brands.toString();
+                        }
+                    } catch (Exception e) {
+                        // Ignore JSON parsing errors
+                    }
+
+                    JButton button = createProductButton(name, description, price, productId, categoryName, brandNames);
+
+                    gbc.gridx = col;
+                    gbc.gridy = row;
+                    gbc.gridwidth = 1;
+                    gbc.fill = GridBagConstraints.NONE;
+                    productGrid.add(button, gbc);
+
+                    col++;
+                    if (col >= 4) { // 4 columns
+                        col = 0;
+                        row++;
+                    }
                 }
+
+                // Fill remaining space
+                gbc.gridx = 0;
+                gbc.gridy = row + 1;
+                gbc.weightx = 1.0;
+                gbc.weighty = 1.0;
+                gbc.fill = GridBagConstraints.BOTH;
+                productGrid.add(Box.createGlue(), gbc);
             }
         }
+
         productGrid.revalidate();
         productGrid.repaint();
+    }
+
+    private boolean matchesPriceRange(String query, Double price) {
+        try {
+            // Remove currency symbols and commas
+            String cleanQuery = query.replace("ksh", "").replace(",", "").trim();
+
+            // Check for price range (e.g., "1000-2000")
+            if (cleanQuery.contains("-")) {
+                String[] parts = cleanQuery.split("-");
+                if (parts.length == 2) {
+                    double min = Double.parseDouble(parts[0].trim());
+                    double max = Double.parseDouble(parts[1].trim());
+                    return price >= min && price <= max;
+                }
+            }
+
+            // Check for comparison operators
+            if (cleanQuery.startsWith(">")) {
+                double value = Double.parseDouble(cleanQuery.substring(1).trim());
+                return price > value;
+            } else if (cleanQuery.startsWith("<")) {
+                double value = Double.parseDouble(cleanQuery.substring(1).trim());
+                return price < value;
+            } else if (cleanQuery.startsWith(">=")) {
+                double value = Double.parseDouble(cleanQuery.substring(2).trim());
+                return price >= value;
+            } else if (cleanQuery.startsWith("<=")) {
+                double value = Double.parseDouble(cleanQuery.substring(2).trim());
+                return price <= value;
+            }
+
+            // Check exact price match
+            double queryPrice = Double.parseDouble(cleanQuery);
+            return Math.abs(price - queryPrice) < 0.01; // Allow small rounding difference
+
+        } catch (NumberFormatException e) {
+            return false;
+        }
     }
 
     // ---------- Cart / Checkout ----------
@@ -364,7 +622,7 @@ public class SalesPanel extends JPanel {
                 try {
                     String value = ((JTextField) getComponent()).getText();
                     // Remove currency symbol and commas
-                    value = value.replace("₦", "").replace(",", "").trim();
+                    value = value.replace("ksh", "").replace(",", "").trim();
                     Double price = Double.parseDouble(value);
 
                     int row = cartTable.getEditingRow();
@@ -372,7 +630,7 @@ public class SalesPanel extends JPanel {
                         CartItem item = cartItems.get(row);
                         if (price < item.originalPrice) {
                             JOptionPane.showMessageDialog(cartTable,
-                                    "Price cannot be less than minimum: ₦ " + String.format("%,.2f", item.originalPrice),
+                                    "Price cannot be less than minimum: ksh " + String.format("%,.2f", item.originalPrice),
                                     "Invalid Price", JOptionPane.ERROR_MESSAGE);
                             return false;
                         }
@@ -420,30 +678,30 @@ public class SalesPanel extends JPanel {
                                 double newPrice = (Double) val;
                                 if (newPrice < item.originalPrice) {
                                     JOptionPane.showMessageDialog(SalesPanel.this,
-                                            "Price cannot be less than minimum: ₦ " + String.format("%,.2f", item.originalPrice),
+                                            "Price cannot be less than minimum: ksh " + String.format("%,.2f", item.originalPrice),
                                             "Invalid Price", JOptionPane.ERROR_MESSAGE);
                                     // Revert to original price
                                     cartModel.setValueAt(item.unitPrice, row, 1);
                                 } else {
                                     item.unitPrice = newPrice;
                                     item.total = round(item.unitPrice * item.quantity);
-                                    cartModel.setValueAt(String.format("₦ %,.2f", item.total), row, 3);
+                                    cartModel.setValueAt(String.format("ksh %,.2f", item.total), row, 3);
                                     calculateTotal();
                                 }
                             } else if (val instanceof String) {
                                 // Handle string input (e.g., user types "1200" instead of 1200.0)
                                 try {
-                                    String strVal = ((String) val).replace("₦", "").replace(",", "").trim();
+                                    String strVal = ((String) val).replace("ksh", "").replace(",", "").trim();
                                     double newPrice = Double.parseDouble(strVal);
                                     if (newPrice < item.originalPrice) {
                                         JOptionPane.showMessageDialog(SalesPanel.this,
-                                                "Price cannot be less than minimum: ₦ " + String.format("%,.2f", item.originalPrice),
+                                                "Price cannot be less than minimum: ksh " + String.format("%,.2f", item.originalPrice),
                                                 "Invalid Price", JOptionPane.ERROR_MESSAGE);
                                         cartModel.setValueAt(item.unitPrice, row, 1);
                                     } else {
                                         item.unitPrice = newPrice;
                                         item.total = round(item.unitPrice * item.quantity);
-                                        cartModel.setValueAt(String.format("₦ %,.2f", item.total), row, 3);
+                                        cartModel.setValueAt(String.format("ksh %,.2f", item.total), row, 3);
                                         calculateTotal();
                                     }
                                 } catch (NumberFormatException ex) {
@@ -463,7 +721,7 @@ public class SalesPanel extends JPanel {
                             if (qty < 1) qty = 1;
                             item.quantity = qty;
                             item.total = round(item.unitPrice * item.quantity);
-                            cartModel.setValueAt(String.format("₦ %,.2f", item.total), row, 3);
+                            cartModel.setValueAt(String.format("ksh %,.2f", item.total), row, 3);
                             calculateTotal();
                         }
                     }
@@ -522,7 +780,7 @@ public class SalesPanel extends JPanel {
         checkoutPanel.setBorder(BorderFactory.createEmptyBorder(12, 0, 0, 0));
         checkoutPanel.setBackground(new Color(250, 250, 250));
 
-        totalLabel = new JLabel("Total: ₦ 0.00", SwingConstants.RIGHT);
+        totalLabel = new JLabel("Total: ksh 0.00", SwingConstants.RIGHT);
         totalLabel.setFont(new Font("Segoe UI", Font.BOLD, 18));
 
         checkoutBtn = new JButton("Process Sale");
@@ -645,7 +903,6 @@ public class SalesPanel extends JPanel {
         }
     }
 
-    // ---------- Credit Sales Tab ----------
     // ---------- Credit Sales Tab ----------
     private JPanel createCreditSalesPanel() {
         JPanel panel = new JPanel(new BorderLayout(8, 8));
@@ -835,7 +1092,7 @@ public class SalesPanel extends JPanel {
         saleIdField.setEditable(false);
 
         JLabel saleTotalLabel = new JLabel("Sale Total:");
-        JTextField saleTotalField = new JTextField(String.format("₦ %,.2f", saleTotal));
+        JTextField saleTotalField = new JTextField(String.format("ksh %,.2f", saleTotal));
         saleTotalField.setEditable(false);
 
         JLabel paymentAmountLabel = new JLabel("Payment Amount:");
@@ -930,6 +1187,48 @@ public class SalesPanel extends JPanel {
         return totalPaid;
     }
 
+    // ---------- Load Categories and Brands for Search ----------
+    private void loadCategoriesAndBrands() {
+        SwingWorker<Void, Void> worker = new SwingWorker<>() {
+            @Override
+            protected Void doInBackground() {
+                try {
+                    // Load categories
+                    String catResp = client.get("/api/secure/categories");
+                    if (catResp != null && !catResp.trim().isEmpty()) {
+                        List<Map<String, Object>> categories = mapper.readValue(catResp, new TypeReference<List<Map<String, Object>>>() {});
+                        categoriesMap.clear();
+                        for (Map<String, Object> cat : categories) {
+                            Integer id = safeIntegerFromObject(cat.get("id"));
+                            String name = Objects.toString(cat.get("name"), "");
+                            if (id != null && !name.isEmpty()) {
+                                categoriesMap.put(id, name);
+                            }
+                        }
+                    }
+
+                    // Load brands
+                    String brandResp = client.get("/api/secure/brands");
+                    if (brandResp != null && !brandResp.trim().isEmpty()) {
+                        List<Map<String, Object>> brands = mapper.readValue(brandResp, new TypeReference<List<Map<String, Object>>>() {});
+                        brandsMap.clear();
+                        for (Map<String, Object> brand : brands) {
+                            Integer id = safeIntegerFromObject(brand.get("id"));
+                            String name = Objects.toString(brand.get("name"), "");
+                            if (id != null && !name.isEmpty()) {
+                                brandsMap.put(id, name);
+                            }
+                        }
+                    }
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+                return null;
+            }
+        };
+        worker.execute();
+    }
+
     // ---------- Networking / Data ----------
     private void loadProducts() {
         SwingWorker<Void, Void> w = new SwingWorker<>() {
@@ -957,6 +1256,17 @@ public class SalesPanel extends JPanel {
                 if (error != null) { showError("Failed to load products: " + error.getMessage()); return; }
                 products.clear();
                 products.addAll(loaded);
+
+                // Build product categories map
+                productCategoriesMap.clear();
+                for (Map<String, Object> product : products) {
+                    Integer productId = getIntegerValue(product, "id", 0);
+                    Integer categoryId = getIntegerValue(product, "categoryId", null);
+                    if (categoryId != null && categoriesMap.containsKey(categoryId)) {
+                        productCategoriesMap.put(productId, categoriesMap.get(categoryId));
+                    }
+                }
+
                 updateProductGrid();
             }
         };
@@ -1045,27 +1355,7 @@ public class SalesPanel extends JPanel {
     }
 
     private void updateProductGrid() {
-        productGrid.removeAll();
-        if (products.isEmpty()) {
-            JLabel noProductsLabel = new JLabel("No products available", SwingConstants.CENTER);
-            noProductsLabel.setFont(new Font("Segoe UI", Font.PLAIN, 14));
-            noProductsLabel.setForeground(new Color(150, 150, 150));
-            productGrid.add(noProductsLabel);
-        } else {
-            for (Map<String, Object> product : products) {
-                String name = getStringValue(product, "name", "Unknown Product");
-                String description = getStringValue(product, "description", "");
-                Double price = getDoubleValue(product, "minimumSellingPrice", 0.0);
-                Integer productId = getIntegerValue(product, "id", 0);
-
-                productGrid.add(
-                        createProductButton(name, description, price, productId)
-                );
-            }
-
-        }
-        productGrid.revalidate();
-        productGrid.repaint();
+        searchProducts(searchField != null ? searchField.getText() : "");
     }
 
     private void updatePaidSalesTable() {
@@ -1503,7 +1793,7 @@ public class SalesPanel extends JPanel {
 
     private void calculateTotal() {
         double total = cartItems.stream().mapToDouble(i -> i.total).sum();
-        totalLabel.setText(String.format("Total: ₦ %,.2f", total));
+        totalLabel.setText(String.format("Total: ksh %,.2f", total));
     }
 
     private double calculateTotalAmount() {
