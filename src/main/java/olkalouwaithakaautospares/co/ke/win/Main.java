@@ -25,8 +25,7 @@ public class Main {
         JFrame frame = new JFrame();
         frame.setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
         frame.setUndecorated(true);
-        frame.setMinimumSize(new Dimension(900, 600));
-        frame.setLayout(new BorderLayout());
+         frame.setLayout(new BorderLayout());
 
         // Main content
         AuthPanel authPanel = new AuthPanel();
@@ -40,6 +39,7 @@ public class Main {
         frame.add(authPanel, BorderLayout.CENTER);
 
         frame.setSize(1100, 700);
+        frame.setMinimumSize(new Dimension(900, 600));
         frame.setLocationRelativeTo(null);
         frame.setVisible(true);
     }

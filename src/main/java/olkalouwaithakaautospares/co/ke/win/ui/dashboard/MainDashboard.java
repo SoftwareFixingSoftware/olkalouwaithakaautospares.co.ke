@@ -15,7 +15,6 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
-import java.io.File;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -37,6 +36,10 @@ public class MainDashboard extends JFrame {
     private static final int ANIM_DURATION_MS = 220;
     private static final int ANIM_DELAY_MS = 15;
 
+    // Minimum window size to ensure usability
+    private static final int MIN_WIDTH = 1024;
+    private static final int MIN_HEIGHT = 768;
+
     public MainDashboard() {
         initUI();
     }
@@ -44,6 +47,11 @@ public class MainDashboard extends JFrame {
     private void initUI() {
         setTitle("POS Pro - Dashboard");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+
+        // Set minimum size before maximizing
+        setMinimumSize(new Dimension(MIN_WIDTH, MIN_HEIGHT));
+
+        // Start maximized
         setExtendedState(JFrame.MAXIMIZED_BOTH);
 
         try {
@@ -80,6 +88,8 @@ public class MainDashboard extends JFrame {
             if (homeBtn != null) setSelectedButton(homeBtn);
         });
 
+        // Center the window on screen
+        setLocationRelativeTo(null);
         setVisible(true);
     }
 
