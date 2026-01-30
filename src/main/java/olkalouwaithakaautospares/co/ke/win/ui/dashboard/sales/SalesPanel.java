@@ -904,24 +904,31 @@ public class SalesPanel extends JPanel {
     }
 
     // ---------- Credit Sales Tab ----------
+    // ---------- Credit Sales Tab ----------
     private JPanel createCreditSalesPanel() {
         JPanel panel = new JPanel(new BorderLayout(8, 8));
         panel.setBackground(Color.WHITE);
-        panel.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(new Color(230, 230, 230), 1),
-                BorderFactory.createEmptyBorder(12, 12, 12, 12)
-        ));
+        panel.setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
 
-        // Header with title and refresh button
+        // Main container with BoxLayout for better vertical arrangement
+        JPanel mainContainer = new JPanel();
+        mainContainer.setLayout(new BoxLayout(mainContainer, BoxLayout.Y_AXIS));
+        mainContainer.setBackground(Color.WHITE);
+
+        // ========== HEADER SECTION ==========
         JPanel headerPanel = new JPanel(new BorderLayout());
         headerPanel.setOpaque(false);
+        headerPanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 40));
 
-        JLabel title = new JLabel("Credit Sales");
-        title.setFont(new Font("Segoe UI", Font.BOLD, 14));
+        JLabel title = new JLabel("Credit Sales Management");
+        title.setFont(new Font("Segoe UI", Font.BOLD, 16));
         title.setForeground(new Color(96, 125, 139));
 
+        JPanel headerButtons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 0));
+        headerButtons.setOpaque(false);
+
         JButton refreshBtn = new JButton("Refresh");
-        styleButton(refreshBtn, new Color(96, 125, 139));
+        styleSmallButton(refreshBtn, new Color(33, 150, 243));
         refreshBtn.addActionListener(e -> {
             selectedCreditSaleLabel.setText("No credit sale selected");
             creditPaymentsModel.setRowCount(0);
@@ -929,29 +936,73 @@ public class SalesPanel extends JPanel {
             loadRecentSales();
         });
 
+        headerButtons.add(refreshBtn);
         headerPanel.add(title, BorderLayout.WEST);
-        headerPanel.add(refreshBtn, BorderLayout.EAST);
+        headerPanel.add(headerButtons, BorderLayout.EAST);
 
-        // Compact search bar for Credit Sales
-        JPanel searchPanel = new JPanel(new BorderLayout(5, 0));
+        // ========== SEARCH SECTION ==========
+        JPanel searchPanel = new JPanel(new BorderLayout(8, 0));
         searchPanel.setOpaque(false);
-        searchPanel.setBorder(BorderFactory.createEmptyBorder(5, 0, 5, 0));
-        searchPanel.setPreferredSize(new Dimension(0, 40));
+        searchPanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 50));
+        searchPanel.setBorder(BorderFactory.createEmptyBorder(5, 0, 10, 0));
 
         creditSalesSearchField = new JTextField();
-        creditSalesSearchField.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        creditSalesSearchField.setFont(new Font("Segoe UI", Font.PLAIN, 13));
         creditSalesSearchField.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createLineBorder(new Color(200, 200, 200), 1),
-                BorderFactory.createEmptyBorder(5, 10, 5, 10)
+                BorderFactory.createEmptyBorder(8, 12, 8, 12)
         ));
-        creditSalesSearchField.putClientProperty("JTextField.placeholderText", "Search credit sales...");
+        creditSalesSearchField.putClientProperty("JTextField.placeholderText", "Search by customer name, sale number, or phone...");
 
-        String[] creditCols = {"Sale ID", "Sale #", "Customer", "Total", "Date"};
+        JPanel searchButtonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
+        searchButtonPanel.setOpaque(false);
+
+        JButton clearSearchBtn = new JButton("Clear");
+        styleSmallButton(clearSearchBtn, new Color(158, 158, 158));
+        clearSearchBtn.setMargin(new Insets(5, 10, 5, 10));
+        clearSearchBtn.addActionListener(e -> {
+            creditSalesSearchField.setText("");
+            filterCreditSales("");
+        });
+
+        JButton creditSearchBtn = new JButton("Search");
+        styleSmallButton(creditSearchBtn, new Color(33, 150, 243));
+        creditSearchBtn.setMargin(new Insets(5, 15, 5, 15));
+        creditSearchBtn.addActionListener(e -> filterCreditSales(creditSalesSearchField.getText()));
+
+        searchButtonPanel.add(clearSearchBtn);
+        searchButtonPanel.add(Box.createHorizontalStrut(5));
+        searchButtonPanel.add(creditSearchBtn);
+
+        searchPanel.add(creditSalesSearchField, BorderLayout.CENTER);
+        searchPanel.add(searchButtonPanel, BorderLayout.EAST);
+
+        // Add DocumentListener for real-time search
+        creditSalesSearchField.getDocument().addDocumentListener(new DocumentListener() {
+            @Override public void insertUpdate(DocumentEvent e) { filterCreditSales(creditSalesSearchField.getText()); }
+            @Override public void removeUpdate(DocumentEvent e) { filterCreditSales(creditSalesSearchField.getText()); }
+            @Override public void changedUpdate(DocumentEvent e) { filterCreditSales(creditSalesSearchField.getText()); }
+        });
+
+        // ========== CREDIT SALES TABLE SECTION ==========
+        String[] creditCols = {"Sale ID", "Sale #", "Customer", "Phone", "Total", "Balance", "Date"};
         creditSalesModel = new DefaultTableModel(creditCols, 0) {
             @Override public boolean isCellEditable(int row, int col) { return false; }
         };
         creditSalesTable = new JTable(creditSalesModel);
+        creditSalesTable.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        creditSalesTable.setRowHeight(30);
+        creditSalesTable.getTableHeader().setFont(new Font("Segoe UI", Font.BOLD, 12));
         creditSalesTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+
+        // Set column widths for better fit
+        creditSalesTable.getColumnModel().getColumn(0).setPreferredWidth(70);   // Sale ID
+        creditSalesTable.getColumnModel().getColumn(1).setPreferredWidth(80);   // Sale #
+        creditSalesTable.getColumnModel().getColumn(2).setPreferredWidth(150);  // Customer
+        creditSalesTable.getColumnModel().getColumn(3).setPreferredWidth(100);  // Phone
+        creditSalesTable.getColumnModel().getColumn(4).setPreferredWidth(90);   // Total
+        creditSalesTable.getColumnModel().getColumn(5).setPreferredWidth(90);   // Balance
+        creditSalesTable.getColumnModel().getColumn(6).setPreferredWidth(120);  // Date
 
         // Setup TableRowSorter for filtering
         creditSalesSorter = new TableRowSorter<>(creditSalesModel);
@@ -961,64 +1012,93 @@ public class SalesPanel extends JPanel {
             if (!e.getValueIsAdjusting()) onCreditSaleSelected();
         });
 
-        // Add DocumentListener for real-time search
-        creditSalesSearchField.getDocument().addDocumentListener(new DocumentListener() {
-            @Override public void insertUpdate(DocumentEvent e) { filterCreditSales(creditSalesSearchField.getText()); }
-            @Override public void removeUpdate(DocumentEvent e) { filterCreditSales(creditSalesSearchField.getText()); }
-            @Override public void changedUpdate(DocumentEvent e) { filterCreditSales(creditSalesSearchField.getText()); }
-        });
-
-        JButton creditSearchBtn = new JButton("Search");
-        styleButton(creditSearchBtn, new Color(33, 150, 243));
-        creditSearchBtn.setPreferredSize(new Dimension(80, 30));
-        creditSearchBtn.addActionListener(e -> filterCreditSales(creditSalesSearchField.getText()));
-
-        searchPanel.add(creditSalesSearchField, BorderLayout.CENTER);
-        searchPanel.add(creditSearchBtn, BorderLayout.EAST);
-
-        // Top panel with header + search
-        JPanel topPanel = new JPanel(new BorderLayout());
-        topPanel.setOpaque(false);
-        topPanel.add(headerPanel, BorderLayout.NORTH);
-        topPanel.add(searchPanel, BorderLayout.SOUTH);
-
         JScrollPane creditSalesScroll = new JScrollPane(creditSalesTable);
         creditSalesScroll.setBorder(BorderFactory.createTitledBorder("Credit Sales List"));
+        creditSalesScroll.setPreferredSize(new Dimension(0, 200)); // Flexible height
 
-        // Bottom: payments view + update payment button
-        JPanel bottom = new JPanel(new BorderLayout(8, 8));
+        // ========== SELECTED SALE INFO SECTION ==========
+        JPanel selectedSalePanel = new JPanel(new BorderLayout());
+        selectedSalePanel.setOpaque(false);
+        selectedSalePanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 40));
+        selectedSalePanel.setBorder(BorderFactory.createEmptyBorder(10, 0, 5, 0));
 
-        creditPaymentsModel = new DefaultTableModel(new String[]{"ID", "Method", "Amount", "Reference", "Paid At"}, 0) {
+        selectedCreditSaleLabel = new JLabel("No credit sale selected");
+        selectedCreditSaleLabel.setFont(new Font("Segoe UI", Font.BOLD, 13));
+        selectedCreditSaleLabel.setForeground(new Color(96, 125, 139));
+
+        JPanel saleInfoButtons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 0));
+        saleInfoButtons.setOpaque(false);
+
+        JButton updatePaymentBtn = new JButton("Update Payment");
+        styleSmallButton(updatePaymentBtn, new Color(255, 193, 7));
+        updatePaymentBtn.addActionListener(e -> showUpdatePaymentDialog());
+
+        saleInfoButtons.add(updatePaymentBtn);
+        selectedSalePanel.add(selectedCreditSaleLabel, BorderLayout.WEST);
+        selectedSalePanel.add(saleInfoButtons, BorderLayout.EAST);
+
+        // ========== PAYMENTS TABLE SECTION ==========
+        String[] paymentCols = {"ID", "Method", "Amount", "Reference", "Paid At"};
+        creditPaymentsModel = new DefaultTableModel(paymentCols, 0) {
             @Override public boolean isCellEditable(int row, int col) { return false; }
         };
         creditPaymentsTable = new JTable(creditPaymentsModel);
+        creditPaymentsTable.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        creditPaymentsTable.setRowHeight(30);
+        creditPaymentsTable.getTableHeader().setFont(new Font("Segoe UI", Font.BOLD, 12));
         creditPaymentsTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
 
+        // Set column widths for payments table
+        creditPaymentsTable.getColumnModel().getColumn(0).setPreferredWidth(50);   // ID
+        creditPaymentsTable.getColumnModel().getColumn(1).setPreferredWidth(80);   // Method
+        creditPaymentsTable.getColumnModel().getColumn(2).setPreferredWidth(100);  // Amount
+        creditPaymentsTable.getColumnModel().getColumn(3).setPreferredWidth(120);  // Reference
+        creditPaymentsTable.getColumnModel().getColumn(4).setPreferredWidth(150);  // Paid At
+
         JScrollPane paymentsScroll = new JScrollPane(creditPaymentsTable);
-        paymentsScroll.setBorder(BorderFactory.createTitledBorder("Payments for selected credit sale"));
+        paymentsScroll.setBorder(BorderFactory.createTitledBorder("Payments History"));
+        paymentsScroll.setPreferredSize(new Dimension(0, 150)); // Flexible height
 
-        // Selected sale label + action buttons
-        JPanel actions = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5));
-        actions.setOpaque(false);
-        selectedCreditSaleLabel = new JLabel("No credit sale selected");
-        selectedCreditSaleLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        // ========== ASSEMBLE ALL COMPONENTS ==========
+        // Add spacing between sections
+        mainContainer.add(headerPanel);
+        mainContainer.add(Box.createVerticalStrut(10));
+        mainContainer.add(searchPanel);
+        mainContainer.add(Box.createVerticalStrut(10));
+        mainContainer.add(creditSalesScroll);
+        mainContainer.add(Box.createVerticalStrut(10));
+        mainContainer.add(selectedSalePanel);
+        mainContainer.add(Box.createVerticalStrut(5));
+        mainContainer.add(paymentsScroll);
 
-        JButton updatePaymentBtn = new JButton("Update Payment");
-        styleButton(updatePaymentBtn, new Color(255, 193, 7));
-        updatePaymentBtn.addActionListener(e -> showUpdatePaymentDialog());
+        // Create a wrapper panel with scroll for very small screens
+        JScrollPane mainScroll = new JScrollPane(mainContainer);
+        mainScroll.setBorder(null);
+        mainScroll.getVerticalScrollBar().setUnitIncrement(16);
 
-        actions.add(selectedCreditSaleLabel);
-        actions.add(Box.createHorizontalStrut(20));
-        actions.add(updatePaymentBtn);
+        // Add some padding for very small screens
+        JPanel wrapper = new JPanel(new BorderLayout());
+        wrapper.setBackground(Color.WHITE);
+        wrapper.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
+        wrapper.add(mainScroll, BorderLayout.CENTER);
 
-        bottom.add(actions, BorderLayout.NORTH);
-        bottom.add(paymentsScroll, BorderLayout.CENTER);
+        panel.add(wrapper, BorderLayout.CENTER);
 
-        panel.add(topPanel, BorderLayout.NORTH);
-        panel.add(creditSalesScroll, BorderLayout.CENTER);
-        panel.add(bottom, BorderLayout.SOUTH);
+        // Load initial data
+        loadRecentSales();
 
         return panel;
+    }
+
+    // Helper method to style small buttons
+    private void styleSmallButton(JButton button, Color color) {
+        button.setFont(new Font("Segoe UI", Font.BOLD, 12));
+        button.setBackground(color);
+        button.setForeground(Color.WHITE);
+        button.setBorderPainted(false);
+        button.setFocusPainted(false);
+        button.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        button.setBorder(BorderFactory.createEmptyBorder(6, 12, 6, 12));
     }
 
 
