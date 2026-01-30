@@ -1422,10 +1422,25 @@ public class AuthPanel extends JPanel {
     }
 
     private BufferedImage loadLogoFromResources(String path) {
-        try (InputStream in = getClass().getResourceAsStream(path)) {
-            if (in != null) return ImageIO.read(in);
-        } catch (IOException ignored) {}
-        return null;
+        if (path == null || !path.startsWith("/")) {
+            throw new IllegalArgumentException("Resource path must start with '/'");
+        }
+
+        ClassLoader cl = Thread.currentThread().getContextClassLoader();
+
+        try (InputStream in = cl.getResourceAsStream(path.substring(1))) {
+
+            if (in == null) {
+                System.err.println(" Resource not found in JAR: " + path);
+                return null;
+            }
+
+            return ImageIO.read(in);
+
+        } catch (IOException e) {
+            e.printStackTrace();
+            return null;
+        }
     }
 
     private Image scaleTo(BufferedImage src, int maxW, int maxH) {

@@ -78,7 +78,7 @@ public class Main {
         );
 
         // ===== Title text only
-        JLabel title = new JLabel("AUTOSPARES");
+        JLabel title = new JLabel("Olkalou waithaka Autospares");
         title.setBorder(BorderFactory.createEmptyBorder(0, 14, 0, 0));
         title.setForeground(new Color(220, 220, 220));
         title.setFont(new Font("Segoe UI", Font.BOLD, 13));

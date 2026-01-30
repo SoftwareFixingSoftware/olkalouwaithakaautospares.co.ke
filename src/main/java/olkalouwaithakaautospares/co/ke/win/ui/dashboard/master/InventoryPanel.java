@@ -478,16 +478,16 @@ public class InventoryPanel extends JPanel {
     }
 
     // ========== PRODUCTS TAB ==========
+    // ========== PRODUCTS TAB ==========
     private JPanel createProductsTab() {
         JPanel panel = new JPanel(new BorderLayout(10, 10));
         panel.setBackground(Color.WHITE);
         panel.setBorder(BorderFactory.createEmptyBorder(15, 15, 15, 15));
 
-        // Table panel with Action buttons
+        // ================= TABLE PANEL =================
         JPanel tablePanel = new JPanel(new BorderLayout());
         tablePanel.setBorder(BorderFactory.createTitledBorder("All Products"));
 
-        // Add action buttons panel to table header
         JPanel tableHeaderPanel = new JPanel(new BorderLayout());
         tableHeaderPanel.setBackground(Color.WHITE);
 
@@ -512,7 +512,9 @@ public class InventoryPanel extends JPanel {
         tableHeaderPanel.add(tableTitle, BorderLayout.WEST);
         tableHeaderPanel.add(actionButtonsPanel, BorderLayout.EAST);
 
-        String[] columns = {"ID", "SKU", "Name", "Category", "Compatible Brands", "Min Price", "Reorder Level", "Active", "Stock"};
+        String[] columns = {"ID", "SKU", "Name", "Category", "Compatible Brands",
+                "Min Price", "Reorder Level", "Active", "Stock"};
+
         productsModel = new DefaultTableModel(columns, 0) {
             @Override
             public boolean isCellEditable(int row, int column) {
@@ -525,39 +527,35 @@ public class InventoryPanel extends JPanel {
         productsTable.setRowHeight(35);
         productsTable.getTableHeader().setFont(new Font("Segoe UI", Font.BOLD, 12));
         productsTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-
-        // Add selection listener for products table
-        productsTable.getSelectionModel().addListSelectionListener(e -> {
-            if (!e.getValueIsAdjusting()) {
-                int row = productsTable.getSelectedRow();
-                if (row >= 0) {
-                    editProductBtn.setEnabled(true);
-                } else {
-                    editProductBtn.setEnabled(false);
-                }
-            }
-        });
-
-        // Color active status
         productsTable.getColumnModel().getColumn(7).setCellRenderer(new StatusRenderer());
 
-        JScrollPane scrollPane = new JScrollPane(productsTable);
+        // FIX: Set column widths for better visibility
+        productsTable.getColumnModel().getColumn(0).setPreferredWidth(50);  // ID
+        productsTable.getColumnModel().getColumn(1).setPreferredWidth(100); // SKU
+        productsTable.getColumnModel().getColumn(2).setPreferredWidth(150); // Name
+        productsTable.getColumnModel().getColumn(3).setPreferredWidth(120); // Category
+        productsTable.getColumnModel().getColumn(4).setPreferredWidth(250); // Compatible Brands - WIDER!
+        productsTable.getColumnModel().getColumn(5).setPreferredWidth(100); // Min Price
+        productsTable.getColumnModel().getColumn(6).setPreferredWidth(100); // Reorder Level
+        productsTable.getColumnModel().getColumn(7).setPreferredWidth(80);  // Active
+        productsTable.getColumnModel().getColumn(8).setPreferredWidth(80);  // Stock
+
+        JScrollPane tableScroll = new JScrollPane(productsTable);
 
         tablePanel.add(tableHeaderPanel, BorderLayout.NORTH);
-        tablePanel.add(scrollPane, BorderLayout.CENTER);
+        tablePanel.add(tableScroll, BorderLayout.CENTER);
 
-        // Form panel - store reference
+        // ================= FORM PANEL =================
         productFormPanel = new JPanel(new GridBagLayout());
         productFormPanel.setBorder(BorderFactory.createTitledBorder("Product Management"));
         productFormPanel.setBackground(Color.WHITE);
-        productFormPanel.setPreferredSize(new Dimension(1100, 650));
 
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.insets = new Insets(8, 8, 8, 8);
-        gbc.fill = GridBagConstraints.HORIZONTAL;
         gbc.anchor = GridBagConstraints.WEST;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
 
-        // Row 0: SKU and Name
+        // ---------- ROW 0 ----------
         gbc.gridx = 0; gbc.gridy = 0; gbc.weightx = 0.15;
         JLabel skuLabel = new JLabel("SKU:");
         skuLabel.setFont(new Font("Segoe UI", Font.BOLD, 13));
@@ -567,66 +565,60 @@ public class InventoryPanel extends JPanel {
         productSkuField.setFont(new Font("Segoe UI", Font.PLAIN, 14));
         productSkuField.setEditable(true);
         productSkuField.setText(generateSKU());
-        productSkuField.setPreferredSize(new Dimension(200, 30));
-        gbc.gridx = 1; gbc.gridy = 0; gbc.weightx = 0.35;
+        gbc.gridx = 1; gbc.weightx = 0.35;
         productFormPanel.add(productSkuField, gbc);
 
-        gbc.gridx = 2; gbc.gridy = 0; gbc.weightx = 0.15;
+        gbc.gridx = 2; gbc.weightx = 0.15;
         JLabel nameLabel = new JLabel("Product Name:");
         nameLabel.setFont(new Font("Segoe UI", Font.BOLD, 13));
         productFormPanel.add(nameLabel, gbc);
 
         productNameField = new JTextField(25);
         productNameField.setFont(new Font("Segoe UI", Font.PLAIN, 14));
-        productNameField.setPreferredSize(new Dimension(250, 30));
-        gbc.gridx = 3; gbc.gridy = 0; gbc.weightx = 0.35;
+        gbc.gridx = 3; gbc.weightx = 0.35;
         productFormPanel.add(productNameField, gbc);
 
-        // Row 1: Category and Reorder Level
-        gbc.gridx = 0; gbc.gridy = 1; gbc.weightx = 0.15;
+        // ---------- ROW 1 ----------
+        gbc.gridy = 1; gbc.gridx = 0;
         JLabel catLabel = new JLabel("Category:");
         catLabel.setFont(new Font("Segoe UI", Font.BOLD, 13));
         productFormPanel.add(catLabel, gbc);
 
         productCategoryCombo = new JComboBox<>();
         productCategoryCombo.setFont(new Font("Segoe UI", Font.PLAIN, 14));
-        productCategoryCombo.setPreferredSize(new Dimension(200, 30));
-        gbc.gridx = 1; gbc.gridy = 1; gbc.weightx = 0.35;
+        gbc.gridx = 1;
         productFormPanel.add(productCategoryCombo, gbc);
 
-        gbc.gridx = 2; gbc.gridy = 1; gbc.weightx = 0.15;
+        gbc.gridx = 2;
         JLabel reorderLabel = new JLabel("Reorder Level:");
         reorderLabel.setFont(new Font("Segoe UI", Font.BOLD, 13));
         productFormPanel.add(reorderLabel, gbc);
 
-        productReorderField = new JTextField(15);
+        productReorderField = new JTextField("10");
         productReorderField.setFont(new Font("Segoe UI", Font.PLAIN, 14));
-        productReorderField.setText("10"); // Default value
-        productReorderField.setPreferredSize(new Dimension(150, 30));
-        gbc.gridx = 3; gbc.gridy = 1; gbc.weightx = 0.35;
+        gbc.gridx = 3;
         productFormPanel.add(productReorderField, gbc);
 
-        // Row 2: Minimum Price and Active Status
-        gbc.gridx = 0; gbc.gridy = 2; gbc.weightx = 0.15;
+        // ---------- ROW 2 ----------
+        gbc.gridy = 2; gbc.gridx = 0;
         JLabel minPriceLabel = new JLabel("Min Price (ksh):");
         minPriceLabel.setFont(new Font("Segoe UI", Font.BOLD, 13));
         productFormPanel.add(minPriceLabel, gbc);
 
-        productMinPriceField = new JTextField(15);
+        productMinPriceField = new JTextField();
         productMinPriceField.setFont(new Font("Segoe UI", Font.PLAIN, 14));
-        productMinPriceField.setPreferredSize(new Dimension(150, 30));
-        gbc.gridx = 1; gbc.gridy = 2; gbc.weightx = 0.35;
+        gbc.gridx = 1;
         productFormPanel.add(productMinPriceField, gbc);
 
-        productActiveCheck = new JCheckBox("Active Product");
-        productActiveCheck.setSelected(true);
+        productActiveCheck = new JCheckBox("Active Product", true);
         productActiveCheck.setFont(new Font("Segoe UI", Font.BOLD, 13));
         productActiveCheck.setBackground(Color.WHITE);
-        gbc.gridx = 2; gbc.gridy = 2; gbc.gridwidth = 2; gbc.weightx = 0.5;
+        gbc.gridx = 2; gbc.gridwidth = 2;
         productFormPanel.add(productActiveCheck, gbc);
+        gbc.gridwidth = 1;
 
-        // Row 3: Description
-        gbc.gridx = 0; gbc.gridy = 3; gbc.weightx = 0.15;
+        // ---------- ROW 3 ----------
+        gbc.gridy = 3; gbc.gridx = 0;
         JLabel descLabel = new JLabel("Description:");
         descLabel.setFont(new Font("Segoe UI", Font.BOLD, 13));
         productFormPanel.add(descLabel, gbc);
@@ -635,40 +627,48 @@ public class InventoryPanel extends JPanel {
         productDescArea.setFont(new Font("Segoe UI", Font.PLAIN, 14));
         productDescArea.setLineWrap(true);
         productDescArea.setWrapStyleWord(true);
-        JScrollPane prodDescScroll = new JScrollPane(productDescArea);
-        prodDescScroll.setPreferredSize(new Dimension(400, 100));
-        gbc.gridx = 1; gbc.gridy = 3; gbc.gridwidth = 3; gbc.weightx = 0.85;
-        gbc.fill = GridBagConstraints.BOTH;
-        productFormPanel.add(prodDescScroll, gbc);
 
-        // Row 4: Compatible Brands - LARGE SCROLLABLE AREA
-        gbc.gridx = 0; gbc.gridy = 4; gbc.weightx = 0.15;
+        JScrollPane descScroll = new JScrollPane(productDescArea);
+        gbc.gridx = 1; gbc.gridwidth = 3;
+        gbc.fill = GridBagConstraints.BOTH;
+        gbc.weighty = 0.4;
+        productFormPanel.add(descScroll, gbc);
+        gbc.gridwidth = 1;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+
+        // ---------- ROW 4 : COMPATIBLE BRANDS ----------
+        gbc.gridy = 4; gbc.gridx = 0;
+        gbc.weighty = 0.8; // reduced so it doesn't dominate
+        gbc.fill = GridBagConstraints.BOTH;
         JLabel brandsLabel = new JLabel("Compatible Brands:");
         brandsLabel.setFont(new Font("Segoe UI", Font.BOLD, 13));
-        brandsLabel.setVerticalAlignment(SwingConstants.TOP);
         productFormPanel.add(brandsLabel, gbc);
 
-        // Create a large panel for checkboxes with scroll
-        productBrandsCheckboxPanel = new JPanel();
-        productBrandsCheckboxPanel.setLayout(new GridLayout(0, 4, 15, 8)); // 4 columns with spacing
+        productBrandsCheckboxPanel = new JPanel(new GridLayout(0, 3, 15, 10));
         productBrandsCheckboxPanel.setBackground(Color.WHITE);
-        productBrandsCheckboxPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
 
         brandsScrollPane = new JScrollPane(productBrandsCheckboxPanel);
-        brandsScrollPane.setPreferredSize(new Dimension(600, 180));
         brandsScrollPane.setBorder(BorderFactory.createTitledBorder("Select Compatible Vehicle Brands"));
+
+        // Platform-aware sizing
+        String osName = System.getProperty("os.name").toLowerCase();
+        if (osName.contains("windows 10")) {
+            brandsScrollPane.setPreferredSize(new Dimension(600, 260));
+            brandsScrollPane.setMinimumSize(new Dimension(550, 220));
+        } else {
+            brandsScrollPane.setPreferredSize(new Dimension(600, 220));
+            brandsScrollPane.setMinimumSize(new Dimension(550, 180));
+        }
+
         brandsScrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_ALWAYS);
         brandsScrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
 
-        gbc.gridx = 1; gbc.gridy = 4; gbc.gridwidth = 3; gbc.weightx = 0.85;
-        gbc.fill = GridBagConstraints.BOTH;
-        gbc.weighty = 0.4;
+        gbc.gridx = 1; gbc.gridwidth = 3;
         productFormPanel.add(brandsScrollPane, gbc);
 
-        // Row 5: Buttons
+        // ---------- ROW 5 : BUTTONS ----------
         JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 20, 10));
         buttonPanel.setOpaque(false);
-        buttonPanel.setBorder(BorderFactory.createEmptyBorder(10, 0, 0, 0));
 
         clearProdBtn = new JButton("Clear Form");
         clearProdBtn.setFont(new Font("Segoe UI", Font.BOLD, 14));
@@ -717,14 +717,24 @@ public class InventoryPanel extends JPanel {
         buttonPanel.add(updateProdBtn);
         buttonPanel.add(cancelEditBtn);
 
-        gbc.gridx = 0; gbc.gridy = 5; gbc.gridwidth = 4; gbc.weightx = 1.0;
-        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.gridy = 5; gbc.gridx = 0; gbc.gridwidth = 4;
         gbc.weighty = 0;
-        gbc.anchor = GridBagConstraints.SOUTH;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
         productFormPanel.add(buttonPanel, gbc);
 
-        JSplitPane splitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT, tablePanel, productFormPanel);
-        splitPane.setDividerLocation(300);
+        // ================= SPLIT PANE =================
+        JSplitPane splitPane = new JSplitPane(
+                JSplitPane.VERTICAL_SPLIT,
+                tablePanel,
+                productFormPanel
+        );
+
+        // Adjust divider based on OS
+        if (osName.contains("windows 10")) {
+            splitPane.setDividerLocation(280); // More space for table on Windows 10
+        } else {
+            splitPane.setDividerLocation(300); // Standard for other OS
+        }
         splitPane.setResizeWeight(0.4);
 
         panel.add(splitPane, BorderLayout.CENTER);

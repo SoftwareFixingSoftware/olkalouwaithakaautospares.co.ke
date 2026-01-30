@@ -2,75 +2,126 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
-         http://maven.apache.org/xsd/maven-4.0.0.xsd">
+                             http://maven.apache.org/xsd/maven-4.0.0.xsd">
+
     <modelVersion>4.0.0</modelVersion>
 
+    <!-- Project coordinates -->
     <groupId>olkalouwaithakaautospares.co.ke.win</groupId>
     <artifactId>olkalouwaithakaautospares_win</artifactId>
-    <version>1.0-SNAPSHOT</version>
+    <version>1.0.0</version>
     <packaging>jar</packaging>
 
     <name>Olkalouwaithaka Autospares Windows Client</name>
-    <description>Desktop Swing client for Olkalouwaithaka Autospares</description>
+    <description>Desktop Swing client for Olkalou waithaka Autospares</description>
 
+    <!-- Centralized properties -->
     <properties>
-        <maven.compiler.source>22</maven.compiler.source>
-        <maven.compiler.target>22</maven.compiler.target>
+        <!-- Use a stable LTS Java for broad compatibility; change only if you will bundle a runtime -->
+        <java.version>17</java.version>
+
+        <!-- Compiler settings -->
+        <maven.compiler.source>${java.version}</maven.compiler.source>
+        <maven.compiler.target>${java.version}</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+
+        <!-- Plugin versions -->
+        <maven.compiler.plugin.version>3.11.0</maven.compiler.plugin.version>
+        <maven.shade.plugin.version>3.5.0</maven.shade.plugin.version>
+        <maven.enforcer.plugin.version>3.0.0</maven.enforcer.plugin.version>
     </properties>
 
     <dependencies>
-        <!-- Jackson for JSON -->
+        <!-- JSON -->
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
             <version>2.17.0</version>
         </dependency>
 
-        <!-- Logging -->
+        <!-- SLF4J API + Logback for production-grade logging -->
         <dependency>
             <groupId>org.slf4j</groupId>
-            <artifactId>slf4j-simple</artifactId>
+            <artifactId>slf4j-api</artifactId>
             <version>2.0.9</version>
         </dependency>
+        <dependency>
+            <groupId>ch.qos.logback</groupId>
+            <artifactId>logback-classic</artifactId>
+            <version>1.5.6</version>
+        </dependency>
 
-        <!-- Optional: validation annotations -->
+        <!-- Validation annotations (optional) -->
         <dependency>
             <groupId>jakarta.validation</groupId>
             <artifactId>jakarta.validation-api</artifactId>
             <version>3.0.2</version>
         </dependency>
 
-        <!-- OpenPDF (PDF generation) -->
+        <!-- PDF generation -->
         <dependency>
             <groupId>com.github.librepdf</groupId>
             <artifactId>openpdf</artifactId>
             <version>1.3.30</version>
         </dependency>
-
-
-
-
     </dependencies>
 
     <build>
+        <!-- Ensure resources from src/main/resources are packaged as-is -->
+        <resources>
+            <resource>
+                <directory>src/main/resources</directory>
+                <filtering>false</filtering>
+            </resource>
+        </resources>
+
         <plugins>
+            <!-- Enforce JDK version for reproducible builds -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-enforcer-plugin</artifactId>
+                <version>${maven.enforcer.plugin.version}</version>
+                <executions>
+                    <execution>
+                        <id>enforce-java</id>
+                        <goals>
+                            <goal>enforce</goal>
+                        </goals>
+                        <configuration>
+                            <rules>
+                                <requireJavaVersion>
+                                    <version>[17,18)</version>
+                                    <message>
+                                        Java ${java.version} is required to build this project.
+                                        For end-user distribution consider bundling a runtime with jpackage.
+                                    </message>
+                                </requireJavaVersion>
+                            </rules>
+                            <fail>true</fail>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
             <!-- Compiler plugin -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.11.0</version>
+                <version>${maven.compiler.plugin.version}</version>
                 <configuration>
                     <source>${maven.compiler.source}</source>
                     <target>${maven.compiler.target}</target>
+                    <!-- Use release if you want cross-compilation guarantees -->
+                    <release>${java.version}</release>
+                    <encoding>${project.build.sourceEncoding}</encoding>
                 </configuration>
             </plugin>
 
-            <!-- Shade plugin: create a single runnable JAR -->
+            <!-- Shade plugin to produce a single runnable jar. Hardened for resources. -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-shade-plugin</artifactId>
-                <version>3.5.0</version>
+                <version>${maven.shade.plugin.version}</version>
                 <executions>
                     <execution>
                         <phase>package</phase>
@@ -78,15 +129,52 @@
                             <goal>shade</goal>
                         </goals>
                         <configuration>
+                            <!-- Do not minimize: minimizing can remove resources you need (images, service descriptors) -->
+                            <minimizeJar>false</minimizeJar>
+
+                            <!-- Prevent creation of a dependency-reduced-pom that can confuse consumers -->
+                            <createDependencyReducedPom>false</createDependencyReducedPom>
+
+                            <!-- Filter out signature files and leave resources intact -->
+                            <filters>
+                                <filter>
+                                    <artifact>*:*</artifact>
+                                    <excludes>
+                                        <exclude>META-INF/*.SF</exclude>
+                                        <exclude>META-INF/*.DSA</exclude>
+                                        <exclude>META-INF/*.RSA</exclude>
+                                    </excludes>
+                                </filter>
+                            </filters>
+
+                            <!-- Merge service files (if any) and create manifest with Main-Class -->
                             <transformers>
+                                <!-- Preserve the manifest and set the Main-Class -->
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
                                     <mainClass>olkalouwaithakaautospares.co.ke.win.Main</mainClass>
                                 </transformer>
+
+                                <!-- Merge service provider configuration files if libraries use java.util.ServiceLoader -->
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
+
+                                <!-- Optional: merge application properties files named application.properties if you have many -->
+                                <!--
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
+                                    <resource>application.properties</resource>
+                                </transformer>
+                                -->
                             </transformers>
+
+                            <!-- Relocations or additional configuration can be added here if needed -->
                         </configuration>
                     </execution>
                 </executions>
             </plugin>
+
         </plugins>
     </build>
+
+    <!-- DistributionManagement, SCM and developer metadata should be added for real releases -->
+    <!-- Example: <distributionManagement> ... </distributionManagement> -->
+
 </project>
